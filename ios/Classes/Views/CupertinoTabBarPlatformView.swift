@@ -29,6 +29,7 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
   private var rightInsetVal: CGFloat = 0
   private var splitSpacingVal: CGFloat = 12 // Apple's recommended spacing for visual separation
   private var currentIconSizes: [CGFloat] = [] // Track icon sizes for dynamic height calculation
+  private var currentLabelStyle: [String: Any]? = nil
 
   init(frame: CGRect, viewId: Int64, args: Any?, messenger: FlutterBinaryMessenger) {
     self.channel = FlutterMethodChannel(name: "CupertinoNativeTabBar_\(viewId)", binaryMessenger: messenger)
@@ -94,6 +95,7 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
       if let rc = dict["rightCount"] as? NSNumber { rightCount = rc.intValue }
       if let sp = dict["splitSpacing"] as? NSNumber { splitSpacingVal = CGFloat(truncating: sp) }
       // content insets controlled by Flutter padding; keep zero here
+      if let ls = dict["labelStyle"] as? [String: Any] { currentLabelStyle = ls }
     }
 
     // Preload SVG assets dynamically based on what's actually being used
@@ -119,9 +121,9 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
     if #available(iOS 13.0, *) {
       let ap = UITabBarAppearance()
       ap.configureWithTransparentBackground()
-      // Remove shadow to prevent shadow appearing over modals/bottom sheets
       ap.shadowColor = .clear
       ap.shadowImage = UIImage()
+      Self.applyLabelStyle(to: ap, labelStyle: self.currentLabelStyle, tint: tint)
       return ap
     }
     return nil
@@ -534,12 +536,14 @@ channel.setMethodCallHandler { [weak self] call, result in
           let activeImageAssetData = self.currentActiveImageAssetData
           let imageAssetFormats = self.currentImageAssetFormats
           let activeImageAssetFormats = self.currentActiveImageAssetFormats
+          let labelStyle = self.currentLabelStyle
           let appearance: UITabBarAppearance? = {
             if #available(iOS 13.0, *) {
               let ap = UITabBarAppearance()
               ap.configureWithTransparentBackground()
               ap.shadowColor = .clear
               ap.shadowImage = UIImage()
+              Self.applyLabelStyle(to: ap, labelStyle: labelStyle, tint: nil)
               return ap
             }
             return nil
@@ -773,8 +777,10 @@ channel.setMethodCallHandler { [weak self] call, result in
         } else { result(FlutterError(code: "bad_args", message: "Missing index", details: nil)) }
       case "setStyle":
         if let args = call.arguments as? [String: Any] {
+          var tintColor: UIColor? = nil
           if let n = args["tint"] as? NSNumber {
             let c = Self.colorFromARGB(n.intValue)
+            tintColor = c
             if let bar = self.tabBar { bar.tintColor = c }
             if let left = self.tabBarLeft { left.tintColor = c }
             if let right = self.tabBarRight { right.tintColor = c }
@@ -784,6 +790,21 @@ channel.setMethodCallHandler { [weak self] call, result in
             if let bar = self.tabBar { bar.barTintColor = c }
             if let left = self.tabBarLeft { left.barTintColor = c }
             if let right = self.tabBarRight { right.barTintColor = c }
+          }
+          if let ls = args["labelStyle"] as? [String: Any] {
+            self.currentLabelStyle = ls
+            if #available(iOS 13.0, *) {
+              let allBars: [UITabBar] = [self.tabBar, self.tabBarLeft, self.tabBarRight].compactMap { $0 }
+              for bar in allBars {
+                let ap = UITabBarAppearance()
+                ap.configureWithTransparentBackground()
+                ap.shadowColor = .clear
+                ap.shadowImage = UIImage()
+                Self.applyLabelStyle(to: ap, labelStyle: ls, tint: tintColor ?? bar.tintColor)
+                bar.standardAppearance = ap
+                if #available(iOS 15.0, *) { bar.scrollEdgeAppearance = ap }
+              }
+            }
           }
           result(nil)
         } else { result(FlutterError(code: "bad_args", message: "Missing style", details: nil)) }
@@ -947,6 +968,79 @@ channel.setMethodCallHandler { [weak self] call, result in
     }
   }
 
+
+  @available(iOS 13.0, *)
+  private static func applyLabelStyle(to appearance: UITabBarAppearance, labelStyle: [String: Any]?, tint: UIColor?) {
+    guard let ls = labelStyle else { return }
+    var normalAttrs: [NSAttributedString.Key: Any] = [:]
+    var selectedAttrs: [NSAttributedString.Key: Any] = [:]
+    let font = buildFont(from: ls)
+    if let font = font {
+      normalAttrs[.font] = font
+      selectedAttrs[.font] = font
+    }
+    if let colorVal = ls["color"] as? NSNumber {
+      normalAttrs[.foregroundColor] = colorFromARGB(colorVal.intValue)
+    }
+    if let activeColorVal = ls["activeColor"] as? NSNumber {
+      selectedAttrs[.foregroundColor] = colorFromARGB(activeColorVal.intValue)
+    } else if let tint = tint {
+      selectedAttrs[.foregroundColor] = tint
+    }
+    if let kern = ls["letterSpacing"] as? NSNumber {
+      normalAttrs[.kern] = CGFloat(truncating: kern)
+      selectedAttrs[.kern] = CGFloat(truncating: kern)
+    }
+    if !normalAttrs.isEmpty {
+      appearance.stackedLayoutAppearance.normal.titleTextAttributes = normalAttrs
+      appearance.inlineLayoutAppearance.normal.titleTextAttributes = normalAttrs
+      appearance.compactInlineLayoutAppearance.normal.titleTextAttributes = normalAttrs
+    }
+    if !selectedAttrs.isEmpty {
+      appearance.stackedLayoutAppearance.selected.titleTextAttributes = selectedAttrs
+      appearance.inlineLayoutAppearance.selected.titleTextAttributes = selectedAttrs
+      appearance.compactInlineLayoutAppearance.selected.titleTextAttributes = selectedAttrs
+    }
+  }
+
+  private static func buildFont(from labelStyle: [String: Any]) -> UIFont? {
+    let size = (labelStyle["fontSize"] as? NSNumber).map { CGFloat(truncating: $0) }
+    let weightVal = labelStyle["fontWeight"] as? NSNumber
+    let family = labelStyle["fontFamily"] as? String
+    let weight: UIFont.Weight? = weightVal.map { Self.mapFontWeight($0.intValue) }
+    if let family = family, let size = size ?? Optional(10) {
+      if let descriptor = UIFontDescriptor(name: family, size: size).withSymbolicTraits(weight.flatMap { Self.symbolicTraits(for: $0) } ?? []) {
+        return UIFont(descriptor: descriptor, size: size)
+      }
+      return UIFont(name: family, size: size) ?? UIFont.systemFont(ofSize: size, weight: weight ?? .regular)
+    }
+    if let size = size {
+      return UIFont.systemFont(ofSize: size, weight: weight ?? .regular)
+    }
+    if let weight = weight {
+      return UIFont.systemFont(ofSize: 10, weight: weight)
+    }
+    return nil
+  }
+
+  private static func mapFontWeight(_ value: Int) -> UIFont.Weight {
+    switch value {
+    case ...100: return .ultraLight
+    case ...200: return .thin
+    case ...300: return .light
+    case ...400: return .regular
+    case ...500: return .medium
+    case ...600: return .semibold
+    case ...700: return .bold
+    case ...800: return .heavy
+    default: return .black
+    }
+  }
+
+  private static func symbolicTraits(for weight: UIFont.Weight) -> UIFontDescriptor.SymbolicTraits? {
+    if weight.rawValue >= UIFont.Weight.bold.rawValue { return .traitBold }
+    return nil
+  }
 
   // Use shared utility functions
   private static func colorFromARGB(_ argb: Int) -> UIColor {

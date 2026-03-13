@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 
 import '../channel/params.dart';
 import '../style/sf_symbol.dart';
+import '../style/tab_bar_label_style.dart';
 import '../style/tab_bar_search_item.dart';
 import '../utils/icon_renderer.dart';
 import '../utils/version_detector.dart';
@@ -108,6 +109,7 @@ class CNTabBar extends StatefulWidget {
     this.splitSpacing =
         12.0, // Apple's recommended spacing for visual separation
     this.searchItem,
+    this.labelStyle,
     this.searchController,
   }) : assert(items.length >= 2, 'Tab bar must have at least 2 items'),
        assert(
@@ -166,6 +168,12 @@ class CNTabBar extends StatefulWidget {
   ///
   /// Defaults to 12pt following Apple's HIG recommendations for visual separation.
   final double splitSpacing; // gap between left/right halves when split
+
+  /// Custom styling for tab bar item labels.
+  ///
+  /// Controls font size, weight, color, and spacing of the text labels
+  /// displayed beneath tab bar icons.
+  final CNTabBarLabelStyle? labelStyle;
 
   /// Optional search tab configuration.
   ///
@@ -376,6 +384,7 @@ class _CNTabBarState extends State<CNTabBar> {
     final capturedSearchStyle = _hasSearch
         ? _buildSearchStyleParams(context)
         : null;
+    final capturedLabelStyle = _buildLabelStyleParams(context);
 
     final labels = widget.items.map((e) => e.label ?? '').toList();
     final symbols = widget.items.map((e) => e.icon?.name ?? '').toList();
@@ -470,6 +479,8 @@ class _CNTabBarState extends State<CNTabBar> {
           if (capturedBackgroundColor != null)
             'backgroundColor': capturedBackgroundColor,
         }),
+      // Label style configuration
+      if (capturedLabelStyle != null) 'labelStyle': capturedLabelStyle,
       // Search configuration (iOS 26+)
       if (_hasSearch) ...{
         'hasSearch': true,
@@ -539,6 +550,40 @@ class _CNTabBarState extends State<CNTabBar> {
       if (style.collapsedTabIcon != null)
         'collapsedTabIcon': style.collapsedTabIcon!.name,
     };
+  }
+
+  Map<String, dynamic>? _buildLabelStyleParams(BuildContext context) {
+    final style = widget.labelStyle;
+    if (style == null) return null;
+    final params = <String, dynamic>{};
+    if (style.fontSize != null) params['fontSize'] = style.fontSize;
+    if (style.fontWeight != null) {
+      params['fontWeight'] = _encodeFontWeight(style.fontWeight!);
+    }
+    if (style.color != null) {
+      params['color'] = resolveColorToArgb(style.color, context);
+    }
+    if (style.activeColor != null) {
+      params['activeColor'] = resolveColorToArgb(style.activeColor, context);
+    }
+    if (style.fontFamily != null) params['fontFamily'] = style.fontFamily;
+    if (style.letterSpacing != null) {
+      params['letterSpacing'] = style.letterSpacing;
+    }
+    return params.isEmpty ? null : params;
+  }
+
+  static int _encodeFontWeight(FontWeight weight) {
+    if (weight == FontWeight.w100) return 100;
+    if (weight == FontWeight.w200) return 200;
+    if (weight == FontWeight.w300) return 300;
+    if (weight == FontWeight.w400) return 400;
+    if (weight == FontWeight.w500) return 500;
+    if (weight == FontWeight.w600) return 600;
+    if (weight == FontWeight.w700) return 700;
+    if (weight == FontWeight.w800) return 800;
+    if (weight == FontWeight.w900) return 900;
+    return 400;
   }
 
   Future<Widget> _buildNativeTabBarPlatformView(
@@ -667,6 +712,10 @@ class _CNTabBarState extends State<CNTabBar> {
       if (_lastBg != bg && bg != null) {
         style['backgroundColor'] = bg;
         _lastBg = bg;
+      }
+      final labelStyleParams = _buildLabelStyleParams(context);
+      if (labelStyleParams != null) {
+        style['labelStyle'] = labelStyleParams;
       }
       if (style.isNotEmpty) {
         await ch.invokeMethod('setStyle', style);
@@ -852,6 +901,8 @@ class _CNTabBarState extends State<CNTabBar> {
     final tintColor = widget.tint ?? ThemeHelper.getPrimaryColor(context);
     final style = widget.searchItem?.style ?? const CNTabBarSearchStyle();
 
+    final labelStyle = widget.labelStyle;
+
     // If no search item, just return regular CupertinoTabBar
     if (!_hasSearch) {
       return SizedBox(
@@ -868,8 +919,8 @@ class _CNTabBarState extends State<CNTabBar> {
           currentIndex: widget.currentIndex,
           onTap: widget.onTap,
           backgroundColor: widget.backgroundColor,
-          inactiveColor: CupertinoColors.inactiveGray,
-          activeColor: tintColor,
+          inactiveColor: labelStyle?.color ?? CupertinoColors.inactiveGray,
+          activeColor: labelStyle?.activeColor ?? tintColor,
         ),
       );
     }
@@ -997,14 +1048,9 @@ class _CNTabBarState extends State<CNTabBar> {
                       const SizedBox(width: 4),
                       Text(
                         widget.items[i].label!,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: widget.currentIndex == i
-                              ? FontWeight.w600
-                              : FontWeight.normal,
-                          color: widget.currentIndex == i
-                              ? tintColor
-                              : CupertinoColors.inactiveGray,
+                        style: _buildLabelTextStyle(
+                          isActive: widget.currentIndex == i,
+                          tintColor: tintColor,
                         ),
                       ),
                     ],
@@ -1128,6 +1174,24 @@ class _CNTabBarState extends State<CNTabBar> {
           ],
         ),
       ),
+    );
+  }
+
+  TextStyle _buildLabelTextStyle({
+    required bool isActive,
+    required Color tintColor,
+  }) {
+    final ls = widget.labelStyle;
+    return TextStyle(
+      fontSize: ls?.fontSize ?? 12,
+      fontWeight: isActive
+          ? (ls?.fontWeight ?? FontWeight.w600)
+          : (ls?.fontWeight ?? FontWeight.normal),
+      color: isActive
+          ? (ls?.activeColor ?? tintColor)
+          : (ls?.color ?? CupertinoColors.inactiveGray),
+      fontFamily: ls?.fontFamily,
+      letterSpacing: ls?.letterSpacing,
     );
   }
 

@@ -36,6 +36,7 @@ export 'components/tab_bar.dart';
 export 'components/popup_menu_button.dart';
 export 'components/popup_gesture.dart';
 export 'style/sf_symbol.dart';
+export 'style/tab_bar_label_style.dart';
 export 'style/button_style.dart';
 export 'style/image_placement.dart';
 export 'components/button.dart';

@@ -13,6 +13,7 @@ class CupertinoTabBarNSView: NSView {
   private var currentSizes: [NSNumber] = []
   private var currentTint: NSColor? = nil
   private var currentBackground: NSColor? = nil
+  private var currentLabelStyle: [String: Any]? = nil
 
   init(viewId: Int64, args: Any?, messenger: FlutterBinaryMessenger) {
     self.channel = FlutterMethodChannel(name: "CupertinoNativeTabBar_\(viewId)", binaryMessenger: messenger)
@@ -50,6 +51,7 @@ class CupertinoTabBarNSView: NSView {
         if let n = style["tint"] as? NSNumber { tint = Self.colorFromARGB(n.intValue) }
         if let n = style["backgroundColor"] as? NSNumber { bg = Self.colorFromARGB(n.intValue) }
       }
+      if let ls = dict["labelStyle"] as? [String: Any] { currentLabelStyle = ls }
     }
 
     super.init(frame: .zero)
@@ -59,6 +61,7 @@ class CupertinoTabBarNSView: NSView {
     appearance = NSAppearance(named: isDark ? .darkAqua : .aqua)
 
     configureSegments(labels: labels, symbols: symbols, customIconBytes: customIconBytes, iconScale: iconScale, sizes: sizes)
+    applyLabelFont()
     if selectedIndex >= 0 { control.selectedSegment = selectedIndex }
     // Save current style and content for retinting
     self.currentLabels = labels
@@ -106,6 +109,10 @@ class CupertinoTabBarNSView: NSView {
             self.wantsLayer = true
             self.layer?.backgroundColor = c.cgColor
           }
+          if let ls = args["labelStyle"] as? [String: Any] {
+            self.currentLabelStyle = ls
+            self.applyLabelFont()
+          }
           self.applySegmentTint()
           result(nil)
         } else { result(FlutterError(code: "bad_args", message: "Missing style", details: nil)) }
@@ -151,6 +158,45 @@ class CupertinoTabBarNSView: NSView {
       } else {
         control.setLabel("", forSegment: i)
       }
+    }
+  }
+
+  private func applyLabelFont() {
+    guard let ls = currentLabelStyle else { return }
+    if let font = Self.buildFont(from: ls) {
+      control.font = font
+    }
+  }
+
+  private static func buildFont(from labelStyle: [String: Any]) -> NSFont? {
+    let size = (labelStyle["fontSize"] as? NSNumber).map { CGFloat(truncating: $0) }
+    let weightVal = labelStyle["fontWeight"] as? NSNumber
+    let family = labelStyle["fontFamily"] as? String
+    let weight: NSFont.Weight? = weightVal.map { mapFontWeight($0.intValue) }
+    if let family = family, let size = size ?? Optional(13) {
+      if let font = NSFont(name: family, size: size) { return font }
+      return NSFont.systemFont(ofSize: size, weight: weight ?? .regular)
+    }
+    if let size = size {
+      return NSFont.systemFont(ofSize: size, weight: weight ?? .regular)
+    }
+    if let weight = weight {
+      return NSFont.systemFont(ofSize: 13, weight: weight)
+    }
+    return nil
+  }
+
+  private static func mapFontWeight(_ value: Int) -> NSFont.Weight {
+    switch value {
+    case ...100: return .ultraLight
+    case ...200: return .thin
+    case ...300: return .light
+    case ...400: return .regular
+    case ...500: return .medium
+    case ...600: return .semibold
+    case ...700: return .bold
+    case ...800: return .heavy
+    default: return .black
     }
   }
 
