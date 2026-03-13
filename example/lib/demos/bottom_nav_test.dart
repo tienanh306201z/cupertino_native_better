@@ -54,27 +54,26 @@ class _BottomNavTestPageState extends State<BottomNavTestPage> {
           SafeArea(
             top: false,
             child: CNTabBar(
-              iconSize: _iconSize,  // Global icon size for all tabs
               items: [
                 CNTabBarItem(
                   label: 'Home',
-                  icon: CNSymbol('house'),
-                  activeIcon: CNSymbol('house.fill'),
+                  icon: CNSymbol('house', size: _iconSize),
+                  activeIcon: CNSymbol('house.fill', size: _iconSize),
                 ),
                 CNTabBarItem(
                   label: 'Browse',
-                  icon: CNSymbol('square.grid.2x2'),
-                  activeIcon: CNSymbol('square.grid.2x2.fill'),
+                  icon: CNSymbol('square.grid.2x2', size: _iconSize),
+                  activeIcon: CNSymbol('square.grid.2x2.fill', size: _iconSize),
                 ),
                 CNTabBarItem(
                   label: 'Library',
-                  icon: CNSymbol('books.vertical'),
-                  activeIcon: CNSymbol('books.vertical.fill'),
+                  icon: CNSymbol('books.vertical', size: _iconSize),
+                  activeIcon: CNSymbol('books.vertical.fill', size: _iconSize),
                 ),
                 CNTabBarItem(
                   label: 'Profile',
-                  icon: CNSymbol('person'),
-                  activeIcon: CNSymbol('person.fill'),
+                  icon: CNSymbol('person', size: _iconSize),
+                  activeIcon: CNSymbol('person.fill', size: _iconSize),
                 ),
               ],
               currentIndex: _currentIndex,
@@ -185,7 +184,7 @@ class _HomeScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  'Use CNTabBar(iconSize: X) to set icon size',
+                  'Set size per item via CNSymbol(size: X)',
                   style: TextStyle(fontSize: 12, color: CupertinoColors.systemGrey),
                   textAlign: TextAlign.center,
                 ),

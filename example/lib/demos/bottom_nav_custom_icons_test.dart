@@ -33,31 +33,30 @@ class _BottomNavCustomIconsTestPageState
           SafeArea(
             top: false,
             child: CNTabBar(
-              iconSize: _iconSize,
               items: [
                 CNTabBarItem(
                   label: 'Home',
-                  imageAsset: CNImageAsset('assets/icons/home.svg'),
+                  imageAsset: CNImageAsset('assets/icons/home.svg', size: _iconSize),
                   activeImageAsset:
-                      CNImageAsset('assets/icons/home_filled.svg'),
+                      CNImageAsset('assets/icons/home_filled.svg', size: _iconSize),
                 ),
                 CNTabBarItem(
                   label: 'Search',
-                  imageAsset: CNImageAsset('assets/icons/search.svg'),
+                  imageAsset: CNImageAsset('assets/icons/search.svg', size: _iconSize),
                   activeImageAsset:
-                      CNImageAsset('assets/icons/search-filled.svg'),
+                      CNImageAsset('assets/icons/search-filled.svg', size: _iconSize),
                 ),
                 CNTabBarItem(
                   label: 'Chat',
-                  imageAsset: CNImageAsset('assets/icons/chat.svg'),
+                  imageAsset: CNImageAsset('assets/icons/chat.svg', size: _iconSize),
                   activeImageAsset:
-                      CNImageAsset('assets/icons/chat-filled.svg'),
+                      CNImageAsset('assets/icons/chat-filled.svg', size: _iconSize),
                 ),
                 CNTabBarItem(
                   label: 'Profile',
-                  imageAsset: CNImageAsset('assets/icons/profile.svg'),
+                  imageAsset: CNImageAsset('assets/icons/profile.svg', size: _iconSize),
                   activeImageAsset:
-                      CNImageAsset('assets/icons/profile-filled.svg'),
+                      CNImageAsset('assets/icons/profile-filled.svg', size: _iconSize),
                 ),
               ],
               currentIndex: _currentIndex,
@@ -140,7 +139,7 @@ class _BottomNavCustomIconsTestPageState
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  'CNTabBar(iconSize: X) with CNImageAsset SVGs',
+                  'Set size per item via CNImageAsset(size: X)',
                   style: TextStyle(
                       fontSize: 12, color: CupertinoColors.systemGrey),
                   textAlign: TextAlign.center,

@@ -28,8 +28,10 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
   private var leftInsetVal: CGFloat = 0
   private var rightInsetVal: CGFloat = 0
   private var splitSpacingVal: CGFloat = 12 // Apple's recommended spacing for visual separation
-  private var currentIconSizes: [CGFloat] = [] // Track icon sizes for dynamic height calculation
+  private var currentIconSizes: [CGFloat] = []
   private var currentLabelStyle: [String: Any]? = nil
+  private var currentItemPaddings: [[Double]]? = nil
+  private var iconAboveLabel: Bool = true
 
   init(frame: CGRect, viewId: Int64, args: Any?, messenger: FlutterBinaryMessenger) {
     self.channel = FlutterMethodChannel(name: "CupertinoNativeTabBar_\(viewId)", binaryMessenger: messenger)
@@ -94,8 +96,13 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
       if let s = dict["split"] as? NSNumber { split = s.boolValue }
       if let rc = dict["rightCount"] as? NSNumber { rightCount = rc.intValue }
       if let sp = dict["splitSpacing"] as? NSNumber { splitSpacingVal = CGFloat(truncating: sp) }
-      // content insets controlled by Flutter padding; keep zero here
       if let ls = dict["labelStyle"] as? [String: Any] { currentLabelStyle = ls }
+      if let ial = dict["iconAboveLabel"] as? NSNumber { self.iconAboveLabel = ial.boolValue }
+      if let paddings = dict["itemPaddings"] as? [[NSNumber]?] {
+        currentItemPaddings = paddings.map { arr in
+          arr?.map { $0.doubleValue } ?? []
+        }
+      }
     }
 
     // Preload SVG assets dynamically based on what's actually being used
@@ -179,12 +186,11 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
         if i < badges.count && !badges[i].isEmpty {
           item.badgeValue = badges[i]
         }
-        // Adjust title position for larger icons to prevent overlap
-        // Default icon size is ~25pt
         if i < sizes.count, let sizeNum = sizes[i], sizeNum.doubleValue > 25 {
           let offset = CGFloat(sizeNum.doubleValue - 25)
           item.titlePositionAdjustment = UIOffset(horizontal: 0, vertical: offset)
         }
+        Self.applyItemPadding(item, index: i, paddings: self.currentItemPaddings)
         items.append(item)
       }
       return items
@@ -208,6 +214,7 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
       if let bg = bg { left.barTintColor = bg; right.barTintColor = bg }
       if #available(iOS 10.0, *), let tint = tint { left.tintColor = tint; right.tintColor = tint }
       if let ap = appearance { if #available(iOS 13.0, *) { left.standardAppearance = ap; right.standardAppearance = ap; if #available(iOS 15.0, *) { left.scrollEdgeAppearance = ap; right.scrollEdgeAppearance = ap } } }
+      if self.iconAboveLabel { Self.forceStackedLayout(on: left); Self.forceStackedLayout(on: right) }
       
       left.items = buildItems(0..<leftEnd)
       right.items = buildItems(leftEnd..<count)
@@ -317,6 +324,7 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
       if let bg = bg { bar.barTintColor = bg }
       if #available(iOS 10.0, *), let tint = tint { bar.tintColor = tint }
       if let ap = appearance { if #available(iOS 13.0, *) { bar.standardAppearance = ap; if #available(iOS 15.0, *) { bar.scrollEdgeAppearance = ap } } }
+      if self.iconAboveLabel { Self.forceStackedLayout(on: bar) }
       bar.items = buildItems(0..<count)
       if selectedIndex >= 0, let items = bar.items, selectedIndex < items.count { bar.selectedItem = items[selectedIndex] }
       container.addSubview(bar)
@@ -480,7 +488,6 @@ channel.setMethodCallHandler { [weak self] call, result in
               if i < badges.count && !badges[i].isEmpty {
                 item.badgeValue = badges[i]
               }
-              // Adjust title position for larger icons to prevent overlap
               if i < sizes.count, let sizeNum = sizes[i] {
                 let pointSize = sizeNum.doubleValue
                 if pointSize > 25 {
@@ -488,6 +495,7 @@ channel.setMethodCallHandler { [weak self] call, result in
                   item.titlePositionAdjustment = UIOffset(horizontal: 0, vertical: offset)
                 }
               }
+              Self.applyItemPadding(item, index: i, paddings: self.currentItemPaddings)
               items.append(item)
             }
             return items
@@ -600,6 +608,7 @@ channel.setMethodCallHandler { [weak self] call, result in
               if i < badges.count && !badges[i].isEmpty {
                 item.badgeValue = badges[i]
               }
+              Self.applyItemPadding(item, index: i, paddings: self.currentItemPaddings)
               items.append(item)
             }
             return items
@@ -621,6 +630,7 @@ channel.setMethodCallHandler { [weak self] call, result in
             left.layer.shadowOpacity = 0; right.layer.shadowOpacity = 0
             left.delegate = self; right.delegate = self
             if let ap = appearance { if #available(iOS 13.0, *) { left.standardAppearance = ap; right.standardAppearance = ap; if #available(iOS 15.0, *) { left.scrollEdgeAppearance = ap; right.scrollEdgeAppearance = ap } } }
+            if self.iconAboveLabel { Self.forceStackedLayout(on: left); Self.forceStackedLayout(on: right) }
             left.items = buildItems(0..<leftEnd)
             right.items = buildItems(leftEnd..<count)
             if selectedIndex < leftEnd, let items = left.items { left.selectedItem = items[selectedIndex]; right.selectedItem = nil }
@@ -715,6 +725,7 @@ channel.setMethodCallHandler { [weak self] call, result in
             }
             bar.layer.shadowOpacity = 0
             if let ap = appearance { if #available(iOS 13.0, *) { bar.standardAppearance = ap; if #available(iOS 15.0, *) { bar.scrollEdgeAppearance = ap } } }
+            if self.iconAboveLabel { Self.forceStackedLayout(on: bar) }
             bar.items = buildItems(0..<count)
             if let items = bar.items, selectedIndex >= 0, selectedIndex < items.count { bar.selectedItem = items[selectedIndex] }
             self.container.addSubview(bar)
@@ -968,6 +979,24 @@ channel.setMethodCallHandler { [weak self] call, result in
     }
   }
 
+
+  private static func forceStackedLayout(on tabBar: UITabBar) {
+    if #available(iOS 17.0, *) {
+      tabBar.traitOverrides.horizontalSizeClass = .compact
+    }
+  }
+
+  private static func applyItemPadding(_ item: UITabBarItem, index: Int, paddings: [[Double]]?) {
+    guard let paddings = paddings, index < paddings.count else { return }
+    let p = paddings[index]
+    guard p.count == 4 else { return }
+    let top = CGFloat(p[0])
+    let left = CGFloat(p[1])
+    let bottom = CGFloat(p[2])
+    let right = CGFloat(p[3])
+    item.imageInsets = UIEdgeInsets(top: top, left: left, bottom: -bottom, right: -right)
+    item.titlePositionAdjustment = UIOffset(horizontal: (left - right) / 2, vertical: bottom)
+  }
 
   @available(iOS 13.0, *)
   private static func applyLabelStyle(to appearance: UITabBarAppearance, labelStyle: [String: Any]?, tint: UIColor?) {

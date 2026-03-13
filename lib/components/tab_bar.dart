@@ -23,6 +23,7 @@ class CNTabBarItem {
     this.activeCustomIcon,
     this.imageAsset,
     this.activeImageAsset,
+    this.padding,
   });
 
   /// Optional tab item label.
@@ -65,6 +66,12 @@ class CNTabBarItem {
   /// Optional image asset for selected state.
   /// If not provided, [imageAsset] is used for both states.
   final CNImageAsset? activeImageAsset;
+
+  /// Optional padding around this tab bar item.
+  ///
+  /// On iOS, this adjusts the item's image insets and title position.
+  /// On macOS and the Flutter fallback, this is applied as widget padding.
+  final EdgeInsets? padding;
 }
 
 /// A Cupertino-native tab bar. Uses native UITabBar/NSTabView style visuals.
@@ -99,15 +106,13 @@ class CNTabBar extends StatefulWidget {
     required this.items,
     required this.currentIndex,
     required this.onTap,
-    this.tint,
     this.backgroundColor,
-    this.iconSize,
     this.height,
     this.split = false,
     this.rightCount = 1,
     this.shrinkCentered = true,
-    this.splitSpacing =
-        12.0, // Apple's recommended spacing for visual separation
+    this.splitSpacing = 12.0,
+    this.iconAboveLabel = true,
     this.searchItem,
     this.labelStyle,
     this.searchController,
@@ -131,14 +136,8 @@ class CNTabBar extends StatefulWidget {
   /// Called when the user selects a new item.
   final ValueChanged<int> onTap;
 
-  /// Accent/tint color.
-  final Color? tint;
-
   /// Background color for the bar.
   final Color? backgroundColor;
-
-  /// Default icon size when item icon does not specify one.
-  final double? iconSize;
 
   /// Fixed height; if null uses intrinsic height reported by native view.
   final double? height;
@@ -167,7 +166,16 @@ class CNTabBar extends StatefulWidget {
   /// Gap between left/right halves when split.
   ///
   /// Defaults to 12pt following Apple's HIG recommendations for visual separation.
-  final double splitSpacing; // gap between left/right halves when split
+  final double splitSpacing;
+
+  /// Whether to force icon-above-label layout on iPad.
+  ///
+  /// On iPad, UITabBar defaults to inline (side-by-side) icon and label layout.
+  /// When `true` (default), forces the stacked (icon above label) layout
+  /// that matches the standard iPhone tab bar appearance.
+  ///
+  /// On iPhone this has no effect since stacked layout is already the default.
+  final bool iconAboveLabel;
 
   /// Custom styling for tab bar item labels.
   ///
@@ -201,7 +209,6 @@ class CNTabBar extends StatefulWidget {
 class _CNTabBarState extends State<CNTabBar> {
   MethodChannel? _channel;
   int? _lastIndex;
-  int? _lastTint;
   int? _lastBg;
   bool? _lastIsDark;
   double? _intrinsicHeight;
@@ -213,7 +220,6 @@ class _CNTabBarState extends State<CNTabBar> {
   bool? _lastSplit;
   int? _lastRightCount;
   double? _lastSplitSpacing;
-  double? _lastIconSize;
 
   // Search state
   bool _isSearchActive = false;
@@ -221,8 +227,7 @@ class _CNTabBarState extends State<CNTabBar> {
   FocusNode? _searchFocusNode;
 
   bool get _isDark => ThemeHelper.isDark(context);
-  Color? get _effectiveTint =>
-      widget.tint ?? ThemeHelper.getPrimaryColor(context);
+  Color? get _themeTint => ThemeHelper.getPrimaryColor(context);
 
   // Whether search mode is enabled
   bool get _hasSearch => widget.searchItem != null;
@@ -375,7 +380,7 @@ class _CNTabBarState extends State<CNTabBar> {
     // Capture all context-derived values before any async operations
     final capturedDevicePixelRatio = MediaQuery.of(context).devicePixelRatio;
     final capturedIsDark = _isDark;
-    final capturedStyle = encodeStyle(context, tint: _effectiveTint);
+    final capturedStyle = encodeStyle(context, tint: _themeTint);
     final capturedBackgroundColor = resolveColorToArgb(
       widget.backgroundColor,
       context,
@@ -412,7 +417,7 @@ class _CNTabBarState extends State<CNTabBar> {
     if (!mounted) return const SizedBox();
 
     final sizes = widget.items
-        .map((e) => (widget.iconSize ?? e.icon?.size ?? e.imageAsset?.size))
+        .map((e) => e.icon?.size ?? e.imageAsset?.size)
         .toList();
     final colors = widget.items
         .map(
@@ -420,6 +425,11 @@ class _CNTabBarState extends State<CNTabBar> {
               resolveColorToArgb(e.icon?.color ?? e.imageAsset?.color, context),
         )
         .toList();
+    final itemPaddings = widget.items.map((e) {
+      final p = e.padding;
+      if (p == null) return null;
+      return [p.top, p.left, p.bottom, p.right];
+    }).toList();
 
     final imageAssetData = widget.items
         .map((e) => e.imageAsset?.imageData)
@@ -467,13 +477,13 @@ class _CNTabBarState extends State<CNTabBar> {
       'iconScale': capturedDevicePixelRatio, // Pass the scale!
       'sfSymbolSizes': sizes,
       'sfSymbolColors': colors,
+      'itemPaddings': itemPaddings,
       'selectedIndex': widget.currentIndex,
       'isDark': capturedIsDark,
-      'split': _hasSearch
-          ? true
-          : widget.split, // Force split when search is enabled
+      'split': _hasSearch ? true : widget.split,
       'rightCount': widget.rightCount,
       'splitSpacing': widget.splitSpacing,
+      'iconAboveLabel': widget.iconAboveLabel,
       'style': capturedStyle
         ..addAll({
           if (capturedBackgroundColor != null)
@@ -621,7 +631,6 @@ class _CNTabBarState extends State<CNTabBar> {
     _channel = ch;
     ch.setMethodCallHandler(_onMethodCall);
     _lastIndex = widget.currentIndex;
-    _lastTint = resolveColorToArgb(_effectiveTint, context);
     _lastBg = resolveColorToArgb(widget.backgroundColor, context);
     _lastIsDark = _isDark;
     _requestIntrinsicSize();
@@ -694,7 +703,6 @@ class _CNTabBarState extends State<CNTabBar> {
     if (ch == null) return;
     // Capture theme-dependent values before awaiting
     final idx = widget.currentIndex;
-    final tint = resolveColorToArgb(_effectiveTint, context);
     final bg = resolveColorToArgb(widget.backgroundColor, context);
     final iconScale = MediaQuery.of(context).devicePixelRatio;
 
@@ -705,10 +713,6 @@ class _CNTabBarState extends State<CNTabBar> {
       }
 
       final style = <String, dynamic>{};
-      if (_lastTint != tint && tint != null) {
-        style['tint'] = tint;
-        _lastTint = tint;
-      }
       if (_lastBg != bg && bg != null) {
         style['backgroundColor'] = bg;
         _lastBg = bg;
@@ -746,15 +750,11 @@ class _CNTabBarState extends State<CNTabBar> {
         return;
       }
 
-      // Check if iconSize changed
-      final iconSizeChanged = _lastIconSize != widget.iconSize;
-
       // Check if basic properties changed
       if (labelsChanged ||
           symbolsChanged ||
           activeSymbolsChanged ||
-          badgesChanged ||
-          iconSizeChanged) {
+          badgesChanged) {
         // Re-render custom icons if items changed
         final iconBytes = await _renderCustomIcons();
         final customIconBytes = iconBytes[0];
@@ -797,9 +797,8 @@ class _CNTabBarState extends State<CNTabBar> {
             )
             .toList();
 
-        // Compute icon sizes (fix for dynamic iconSize updates)
         final sizes = widget.items
-            .map((e) => widget.iconSize ?? e.icon?.size ?? e.imageAsset?.size)
+            .map((e) => e.icon?.size ?? e.imageAsset?.size)
             .toList();
 
         await ch.invokeMethod('setItems', {
@@ -823,7 +822,6 @@ class _CNTabBarState extends State<CNTabBar> {
         _lastSymbols = symbols;
         _lastActiveSymbols = activeSymbols;
         _lastBadges = badges;
-        _lastIconSize = widget.iconSize;
         // Re-measure width in case content changed
         _requestIntrinsicSize();
       }
@@ -898,7 +896,8 @@ class _CNTabBarState extends State<CNTabBar> {
   /// Builds the Flutter fallback for non-iOS 26+ platforms.
   /// Includes search functionality when searchItem is provided.
   Widget _buildFlutterFallback(BuildContext context) {
-    final tintColor = widget.tint ?? ThemeHelper.getPrimaryColor(context);
+    final tintColor =
+        widget.labelStyle?.activeColor ?? ThemeHelper.getPrimaryColor(context);
     final style = widget.searchItem?.style ?? const CNTabBarSearchStyle();
 
     final labelStyle = widget.labelStyle;
@@ -1026,10 +1025,8 @@ class _CNTabBarState extends State<CNTabBar> {
             GestureDetector(
               onTap: () => widget.onTap(i),
               child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
+                padding: widget.items[i].padding ??
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
