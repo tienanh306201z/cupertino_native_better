@@ -116,6 +116,7 @@ class CNTabBar extends StatefulWidget {
     this.searchItem,
     this.labelStyle,
     this.searchController,
+    this.fallback,
   }) : assert(items.length >= 2, 'Tab bar must have at least 2 items'),
        assert(
          items.length <= 5,
@@ -201,6 +202,16 @@ class CNTabBar extends StatefulWidget {
   /// - Set or clear the search text
   /// - Listen to search state changes
   final CNTabBarSearchController? searchController;
+
+  /// Custom widget to show instead of the default Flutter fallback.
+  ///
+  /// Used when:
+  /// - Platform is not iOS/macOS
+  /// - iOS/macOS version does not support native tab bar (e.g. iOS < 26)
+  /// - Custom icons are loading or native view is being built
+  ///
+  /// If null, the built-in Cupertino-style fallback is used.
+  final Widget? fallback;
 
   @override
   State<CNTabBar> createState() => _CNTabBarState();
@@ -302,8 +313,7 @@ class _CNTabBarState extends State<CNTabBar> {
 
     // Fallback to Flutter widgets for non-iOS/macOS or iOS/macOS < 26
     if (!shouldUseNative) {
-      // For both non-iOS/macOS and iOS/macOS < 26, use Flutter-based implementation
-      return _buildFlutterFallback(context);
+      return _resolveFallback(context);
     }
 
     // Render custom IconData to bytes.
@@ -312,7 +322,7 @@ class _CNTabBarState extends State<CNTabBar> {
       future: _renderCustomIcons(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
-          return _buildFlutterFallback(context);
+          return _resolveFallback(context);
         }
 
         final iconBytes = snapshot.data!;
@@ -327,7 +337,7 @@ class _CNTabBarState extends State<CNTabBar> {
           ),
           builder: (context, snapshot) {
             if (!snapshot.hasData) {
-              return _buildFlutterFallback(context);
+              return _resolveFallback(context);
             }
             return snapshot.data!;
           },
@@ -900,6 +910,10 @@ class _CNTabBarState extends State<CNTabBar> {
         if (w != null && w > 0) _intrinsicWidth = w;
       });
     } catch (_) {}
+  }
+
+  Widget _resolveFallback(BuildContext context) {
+    return widget.fallback ?? _buildFlutterFallback(context);
   }
 
   /// Builds the Flutter fallback for non-iOS 26+ platforms.
