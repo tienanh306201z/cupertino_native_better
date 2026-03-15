@@ -1,6 +1,6 @@
 // This is a generated file; do not edit or check into version control.
-FLUTTER_ROOT=/Users/emirgunumdogdu/development/flutter
-FLUTTER_APPLICATION_PATH=/Users/emirgunumdogdu/development/cupertino_native_better/example
+FLUTTER_ROOT=/Users/user/fvm/versions/3.41.2
+FLUTTER_APPLICATION_PATH=/Users/user/Projects/MobileProjects/cupertino_native_better/example
 COCOAPODS_PARALLEL_CODE_SIGN=true
 FLUTTER_BUILD_DIR=build
 FLUTTER_BUILD_NAME=1.0.0
