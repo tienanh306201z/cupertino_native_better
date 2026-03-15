@@ -32,6 +32,8 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
   private var currentLabelStyle: [String: Any]? = nil
   private var currentItemPaddings: [[Double]]? = nil
   private var iconAboveLabel: Bool = true
+  private var currentColors: [NSNumber?] = []
+  private var currentBgColor: UIColor? = nil
 
   init(frame: CGRect, viewId: Int64, args: Any?, messenger: FlutterBinaryMessenger) {
     self.channel = FlutterMethodChannel(name: "CupertinoNativeTabBar_\(viewId)", binaryMessenger: messenger)
@@ -51,7 +53,7 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
     var activeImageAssetFormats: [String] = []
     var iconScale: CGFloat = UIScreen.main.scale
     var sizes: [NSNumber?] = []
-    var colors: [NSNumber] = [] // ignored; use tintColor
+    var colors: [NSNumber?] = []
     var selectedIndex: Int = 0
     var isDark: Bool = false
     var tint: UIColor? = nil
@@ -86,7 +88,7 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
         iconScale = CGFloat(truncating: scale)
       }
       sizes = (dict["sfSymbolSizes"] as? [NSNumber?]) ?? []
-      colors = (dict["sfSymbolColors"] as? [NSNumber]) ?? []
+      colors = (dict["sfSymbolColors"] as? [NSNumber?]) ?? []
       if let v = dict["selectedIndex"] as? NSNumber { selectedIndex = v.intValue }
       if let v = dict["isDark"] as? NSNumber { isDark = v.boolValue }
       if let style = dict["style"] as? [String: Any] {
@@ -98,9 +100,12 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
       if let sp = dict["splitSpacing"] as? NSNumber { splitSpacingVal = CGFloat(truncating: sp) }
       if let ls = dict["labelStyle"] as? [String: Any] { currentLabelStyle = ls }
       if let ial = dict["iconAboveLabel"] as? NSNumber { self.iconAboveLabel = ial.boolValue }
-      if let paddings = dict["itemPaddings"] as? [[NSNumber]?] {
-        currentItemPaddings = paddings.map { arr in
-          arr?.map { $0.doubleValue } ?? []
+      if let rawPaddings = dict["itemPaddings"] as? [Any] {
+        currentItemPaddings = rawPaddings.map { element in
+          if let arr = element as? [NSNumber] {
+            return arr.map { $0.doubleValue }
+          }
+          return []
         }
       }
     }
@@ -130,6 +135,7 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
       ap.configureWithTransparentBackground()
       ap.shadowColor = .clear
       ap.shadowImage = UIImage()
+      if let bg = bg { ap.backgroundColor = bg }
       Self.applyLabelStyle(to: ap, labelStyle: self.currentLabelStyle, tint: tint)
       return ap
     }
@@ -181,6 +187,9 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
           selectedImage = image // Fallback to same image
         }
 
+        let itemColor = Self.colorForItem(index: i, colors: colors)
+        image = Self.applyItemColor(image, color: itemColor)
+        selectedImage = Self.applyItemColor(selectedImage, color: itemColor)
         let title = (i < labels.count && !labels[i].isEmpty) ? labels[i] : nil
         let item = UITabBarItem(title: title, image: image, selectedImage: selectedImage)
         if i < badges.count && !badges[i].isEmpty {
@@ -214,7 +223,7 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
       if let bg = bg { left.barTintColor = bg; right.barTintColor = bg }
       if #available(iOS 10.0, *), let tint = tint { left.tintColor = tint; right.tintColor = tint }
       if let ap = appearance { if #available(iOS 13.0, *) { left.standardAppearance = ap; right.standardAppearance = ap; if #available(iOS 15.0, *) { left.scrollEdgeAppearance = ap; right.scrollEdgeAppearance = ap } } }
-      if self.iconAboveLabel { Self.forceStackedLayout(on: left); Self.forceStackedLayout(on: right) }
+      if self.iconAboveLabel { Self.forceStackedLayout(on: left); Self.forceStackedLayout(on: right) } else { Self.forceInlineLayout(on: left); Self.forceInlineLayout(on: right) }
       
       left.items = buildItems(0..<leftEnd)
       right.items = buildItems(leftEnd..<count)
@@ -324,7 +333,7 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
       if let bg = bg { bar.barTintColor = bg }
       if #available(iOS 10.0, *), let tint = tint { bar.tintColor = tint }
       if let ap = appearance { if #available(iOS 13.0, *) { bar.standardAppearance = ap; if #available(iOS 15.0, *) { bar.scrollEdgeAppearance = ap } } }
-      if self.iconAboveLabel { Self.forceStackedLayout(on: bar) }
+      if self.iconAboveLabel { Self.forceStackedLayout(on: bar) } else { Self.forceInlineLayout(on: bar) }
       bar.items = buildItems(0..<count)
       if selectedIndex >= 0, let items = bar.items, selectedIndex < items.count { bar.selectedItem = items[selectedIndex] }
       container.addSubview(bar)
@@ -373,6 +382,8 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
     self.leftInsetVal = leftInset
     self.rightInsetVal = rightInset
     self.currentIconSizes = sizes.compactMap { $0 }.map { CGFloat(truncating: $0) }
+    self.currentColors = colors
+    self.currentBgColor = bg
 channel.setMethodCallHandler { [weak self] call, result in
       guard let self = self else { result(nil); return }
       switch call.method {
@@ -437,17 +448,16 @@ channel.setMethodCallHandler { [weak self] call, result in
           self.currentActiveImageAssetFormats = activeImageAssetFormats
           // Store icon sizes for dynamic height calculation
           self.currentIconSizes = sizes.compactMap { $0?.doubleValue }.map { CGFloat($0) }
+          let colors = (args["sfSymbolColors"] as? [NSNumber?]) ?? self.currentColors
+          self.currentColors = colors
           func buildItems(_ range: Range<Int>) -> [UITabBarItem] {
             var items: [UITabBarItem] = []
             for i in range {
               var image: UIImage? = nil
               var selectedImage: UIImage? = nil
 
-              // Extract size for this item from sizes array
               let imgSize: CGSize? = (i < sizes.count) ? sizes[i].flatMap { $0.doubleValue > 0 ? CGSize(width: $0.doubleValue, height: $0.doubleValue) : nil } : nil
 
-              // Priority: imageAsset > customIconBytes > SF Symbol
-              // Unselected image
               if i < imageAssetData.count, let data = imageAssetData[i] {
                 image = Self.createImageFromData(data, format: (i < imageAssetFormats.count) ? imageAssetFormats[i] : nil, scale: self.iconScale, size: imgSize)
               } else if i < imageAssetPaths.count && !imageAssetPaths[i].isEmpty {
@@ -455,7 +465,6 @@ channel.setMethodCallHandler { [weak self] call, result in
               } else if i < customIconBytes.count, let data = customIconBytes[i] {
                 image = UIImage(data: data, scale: self.iconScale)?.withRenderingMode(.alwaysTemplate)
               } else if i < symbols.count && !symbols[i].isEmpty {
-                // Apply size configuration if specified
                 if i < sizes.count, let sizeNum = sizes[i], sizeNum.doubleValue > 0 {
                   let config = UIImage.SymbolConfiguration(pointSize: CGFloat(sizeNum.doubleValue))
                   image = UIImage(systemName: symbols[i], withConfiguration: config)
@@ -464,7 +473,6 @@ channel.setMethodCallHandler { [weak self] call, result in
                 }
               }
 
-              // Selected image: Use active versions if available
               if i < activeImageAssetData.count, let data = activeImageAssetData[i] {
                 selectedImage = Self.createImageFromData(data, format: (i < activeImageAssetFormats.count) ? activeImageAssetFormats[i] : nil, scale: self.iconScale, size: imgSize)
               } else if i < activeImageAssetPaths.count && !activeImageAssetPaths[i].isEmpty {
@@ -472,7 +480,6 @@ channel.setMethodCallHandler { [weak self] call, result in
               } else if i < activeCustomIconBytes.count, let data = activeCustomIconBytes[i] {
                 selectedImage = UIImage(data: data, scale: self.iconScale)?.withRenderingMode(.alwaysTemplate)
               } else if i < activeSymbols.count && !activeSymbols[i].isEmpty {
-                // Apply size configuration if specified
                 if i < sizes.count, let sizeNum = sizes[i], sizeNum.doubleValue > 0 {
                   let config = UIImage.SymbolConfiguration(pointSize: CGFloat(sizeNum.doubleValue))
                   selectedImage = UIImage(systemName: activeSymbols[i], withConfiguration: config)
@@ -480,9 +487,12 @@ channel.setMethodCallHandler { [weak self] call, result in
                   selectedImage = UIImage(systemName: activeSymbols[i])
                 }
               } else {
-                selectedImage = image // Fallback to same image
+                selectedImage = image
               }
 
+              let itemColor = Self.colorForItem(index: i, colors: colors)
+              image = Self.applyItemColor(image, color: itemColor)
+              selectedImage = Self.applyItemColor(selectedImage, color: itemColor)
               let title = (i < labels.count && !labels[i].isEmpty) ? labels[i] : nil
               let item = UITabBarItem(title: title, image: image, selectedImage: selectedImage)
               if i < badges.count && !badges[i].isEmpty {
@@ -551,23 +561,21 @@ channel.setMethodCallHandler { [weak self] call, result in
               ap.configureWithTransparentBackground()
               ap.shadowColor = .clear
               ap.shadowImage = UIImage()
+              if let bg = self.currentBgColor { ap.backgroundColor = bg }
               Self.applyLabelStyle(to: ap, labelStyle: labelStyle, tint: nil)
               return ap
             }
             return nil
           }()
           let iconSizes = self.currentIconSizes
+          let colors = self.currentColors
           func buildItems(_ range: Range<Int>) -> [UITabBarItem] {
             var items: [UITabBarItem] = []
             for i in range {
               var image: UIImage? = nil
               var selectedImage: UIImage? = nil
-
-              // Extract size for this item from stored icon sizes
               let imgSize: CGSize? = (i < iconSizes.count && iconSizes[i] > 0) ? CGSize(width: iconSizes[i], height: iconSizes[i]) : nil
 
-              // Priority: imageAsset > customIconBytes > SF Symbol
-              // Unselected image
               if i < imageAssetData.count, let data = imageAssetData[i] {
                 image = Self.createImageFromData(data, format: (i < imageAssetFormats.count) ? imageAssetFormats[i] : nil, scale: self.iconScale, size: imgSize)
               } else if i < imageAssetPaths.count && !imageAssetPaths[i].isEmpty {
@@ -575,7 +583,6 @@ channel.setMethodCallHandler { [weak self] call, result in
               } else if i < customIconBytes.count, let data = customIconBytes[i] {
                 image = UIImage(data: data, scale: self.iconScale)?.withRenderingMode(.alwaysTemplate)
               } else if i < symbols.count && !symbols[i].isEmpty {
-                // Apply size configuration if stored
                 if i < iconSizes.count && iconSizes[i] > 0 {
                   let config = UIImage.SymbolConfiguration(pointSize: iconSizes[i])
                   image = UIImage(systemName: symbols[i], withConfiguration: config)
@@ -584,7 +591,6 @@ channel.setMethodCallHandler { [weak self] call, result in
                 }
               }
 
-              // Selected image: Use active versions if available
               if i < activeImageAssetData.count, let data = activeImageAssetData[i] {
                 selectedImage = Self.createImageFromData(data, format: (i < activeImageAssetFormats.count) ? activeImageAssetFormats[i] : nil, scale: self.iconScale, size: imgSize)
               } else if i < activeImageAssetPaths.count && !activeImageAssetPaths[i].isEmpty {
@@ -592,7 +598,6 @@ channel.setMethodCallHandler { [weak self] call, result in
               } else if i < activeCustomIconBytes.count, let data = activeCustomIconBytes[i] {
                 selectedImage = UIImage(data: data, scale: self.iconScale)?.withRenderingMode(.alwaysTemplate)
               } else if i < activeSymbols.count && !activeSymbols[i].isEmpty {
-                // Apply size configuration if stored
                 if i < iconSizes.count && iconSizes[i] > 0 {
                   let config = UIImage.SymbolConfiguration(pointSize: iconSizes[i])
                   selectedImage = UIImage(systemName: activeSymbols[i], withConfiguration: config)
@@ -600,9 +605,12 @@ channel.setMethodCallHandler { [weak self] call, result in
                   selectedImage = UIImage(systemName: activeSymbols[i])
                 }
               } else {
-                selectedImage = image // Fallback to same image
+                selectedImage = image
               }
 
+              let itemColor = Self.colorForItem(index: i, colors: colors)
+              image = Self.applyItemColor(image, color: itemColor)
+              selectedImage = Self.applyItemColor(selectedImage, color: itemColor)
               let title = (i < labels.count && !labels[i].isEmpty) ? labels[i] : nil
               let item = UITabBarItem(title: title, image: image, selectedImage: selectedImage)
               if i < badges.count && !badges[i].isEmpty {
@@ -630,7 +638,7 @@ channel.setMethodCallHandler { [weak self] call, result in
             left.layer.shadowOpacity = 0; right.layer.shadowOpacity = 0
             left.delegate = self; right.delegate = self
             if let ap = appearance { if #available(iOS 13.0, *) { left.standardAppearance = ap; right.standardAppearance = ap; if #available(iOS 15.0, *) { left.scrollEdgeAppearance = ap; right.scrollEdgeAppearance = ap } } }
-            if self.iconAboveLabel { Self.forceStackedLayout(on: left); Self.forceStackedLayout(on: right) }
+            if self.iconAboveLabel { Self.forceStackedLayout(on: left); Self.forceStackedLayout(on: right) } else { Self.forceInlineLayout(on: left); Self.forceInlineLayout(on: right) }
             left.items = buildItems(0..<leftEnd)
             right.items = buildItems(leftEnd..<count)
             if selectedIndex < leftEnd, let items = left.items { left.selectedItem = items[selectedIndex]; right.selectedItem = nil }
@@ -725,7 +733,7 @@ channel.setMethodCallHandler { [weak self] call, result in
             }
             bar.layer.shadowOpacity = 0
             if let ap = appearance { if #available(iOS 13.0, *) { bar.standardAppearance = ap; if #available(iOS 15.0, *) { bar.scrollEdgeAppearance = ap } } }
-            if self.iconAboveLabel { Self.forceStackedLayout(on: bar) }
+            if self.iconAboveLabel { Self.forceStackedLayout(on: bar) } else { Self.forceInlineLayout(on: bar) }
             bar.items = buildItems(0..<count)
             if let items = bar.items, selectedIndex >= 0, selectedIndex < items.count { bar.selectedItem = items[selectedIndex] }
             self.container.addSubview(bar)
@@ -798,9 +806,21 @@ channel.setMethodCallHandler { [weak self] call, result in
           }
           if let n = args["backgroundColor"] as? NSNumber {
             let c = Self.colorFromARGB(n.intValue)
-            if let bar = self.tabBar { bar.barTintColor = c }
-            if let left = self.tabBarLeft { left.barTintColor = c }
-            if let right = self.tabBarRight { right.barTintColor = c }
+            self.currentBgColor = c
+            if #available(iOS 13.0, *) {
+              let allBars: [UITabBar] = [self.tabBar, self.tabBarLeft, self.tabBarRight].compactMap { $0 }
+              for bar in allBars {
+                if let ap = bar.standardAppearance.copy() as? UITabBarAppearance {
+                  ap.backgroundColor = c
+                  bar.standardAppearance = ap
+                  if #available(iOS 15.0, *) { bar.scrollEdgeAppearance = ap }
+                }
+              }
+            } else {
+              if let bar = self.tabBar { bar.barTintColor = c }
+              if let left = self.tabBarLeft { left.barTintColor = c }
+              if let right = self.tabBarRight { right.barTintColor = c }
+            }
           }
           if let ls = args["labelStyle"] as? [String: Any] {
             self.currentLabelStyle = ls
@@ -984,6 +1004,25 @@ channel.setMethodCallHandler { [weak self] call, result in
     if #available(iOS 17.0, *) {
       tabBar.traitOverrides.horizontalSizeClass = .compact
     }
+  }
+
+  private static func forceInlineLayout(on tabBar: UITabBar) {
+    if #available(iOS 17.0, *) {
+      tabBar.traitOverrides.horizontalSizeClass = .regular
+    }
+  }
+
+  private static func applyItemColor(_ image: UIImage?, color: UIColor?) -> UIImage? {
+    guard let image = image, let color = color else { return image }
+    if #available(iOS 13.0, *) {
+      return image.withTintColor(color, renderingMode: .alwaysOriginal)
+    }
+    return image
+  }
+
+  private static func colorForItem(index: Int, colors: [NSNumber?]) -> UIColor? {
+    guard index < colors.count, let argb = colors[index] else { return nil }
+    return colorFromARGB(argb.intValue)
   }
 
   private static func applyItemPadding(_ item: UITabBarItem, index: Int, paddings: [[Double]]?) {

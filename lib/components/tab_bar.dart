@@ -801,6 +801,14 @@ class _CNTabBarState extends State<CNTabBar> {
             .map((e) => e.icon?.size ?? e.imageAsset?.size)
             .toList();
 
+        final colors = widget.items
+            .map(
+              (e) => resolveColorToArgb(
+                e.icon?.color ?? e.imageAsset?.color,
+                context,
+              ),
+            )
+            .toList();
         await ch.invokeMethod('setItems', {
           'labels': labels,
           'sfSymbols': symbols,
@@ -817,6 +825,7 @@ class _CNTabBarState extends State<CNTabBar> {
           'iconScale': iconScale,
           'selectedIndex': widget.currentIndex,
           'sfSymbolSizes': sizes,
+          'sfSymbolColors': colors,
         });
         _lastLabels = labels;
         _lastSymbols = symbols;
