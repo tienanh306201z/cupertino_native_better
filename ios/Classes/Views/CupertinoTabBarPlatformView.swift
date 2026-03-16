@@ -269,19 +269,23 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
           left.bottomAnchor.constraint(equalTo: container.bottomAnchor),
         ])
       } else {
+        let guide = UILayoutGuide()
+        container.addLayoutGuide(guide)
         NSLayoutConstraint.activate([
-          // Right bar fixed width, pinned to trailing
-          right.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -rightInset),
-          right.topAnchor.constraint(equalTo: container.topAnchor),
-          right.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-          right.widthAnchor.constraint(equalToConstant: adjustedRightWidth),
-          // Left bar fixed width, pinned to leading
-          left.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: leftInset),
+          guide.centerXAnchor.constraint(equalTo: container.centerXAnchor),
+          guide.topAnchor.constraint(equalTo: container.topAnchor),
+          guide.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+          
+          left.leadingAnchor.constraint(equalTo: guide.leadingAnchor),
           left.topAnchor.constraint(equalTo: container.topAnchor),
           left.bottomAnchor.constraint(equalTo: container.bottomAnchor),
           left.widthAnchor.constraint(equalToConstant: adjustedLeftWidth),
-          // Spacing between
-          left.trailingAnchor.constraint(lessThanOrEqualTo: right.leadingAnchor, constant: -spacing),
+          
+          right.leadingAnchor.constraint(equalTo: left.trailingAnchor, constant: spacing),
+          right.trailingAnchor.constraint(equalTo: guide.trailingAnchor),
+          right.topAnchor.constraint(equalTo: container.topAnchor),
+          right.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+          right.widthAnchor.constraint(equalToConstant: adjustedRightWidth),
         ])
       }
       // Force layout update for background and text rendering on iOS < 16
@@ -688,16 +692,23 @@ channel.setMethodCallHandler { [weak self] call, result in
                 left.bottomAnchor.constraint(equalTo: self.container.bottomAnchor),
               ])
             } else {
+              let guide = UILayoutGuide()
+              self.container.addLayoutGuide(guide)
               NSLayoutConstraint.activate([
-                right.trailingAnchor.constraint(equalTo: self.container.trailingAnchor, constant: -rightInset),
-                right.topAnchor.constraint(equalTo: self.container.topAnchor),
-                right.bottomAnchor.constraint(equalTo: self.container.bottomAnchor),
-                right.widthAnchor.constraint(equalToConstant: adjustedRightWidth),
-                left.leadingAnchor.constraint(equalTo: self.container.leadingAnchor, constant: leftInset),
+                guide.centerXAnchor.constraint(equalTo: self.container.centerXAnchor),
+                guide.topAnchor.constraint(equalTo: self.container.topAnchor),
+                guide.bottomAnchor.constraint(equalTo: self.container.bottomAnchor),
+                
+                left.leadingAnchor.constraint(equalTo: guide.leadingAnchor),
                 left.topAnchor.constraint(equalTo: self.container.topAnchor),
                 left.bottomAnchor.constraint(equalTo: self.container.bottomAnchor),
                 left.widthAnchor.constraint(equalToConstant: adjustedLeftWidth),
-                left.trailingAnchor.constraint(lessThanOrEqualTo: right.leadingAnchor, constant: -spacing),
+                
+                right.leadingAnchor.constraint(equalTo: left.trailingAnchor, constant: spacing),
+                right.trailingAnchor.constraint(equalTo: guide.trailingAnchor),
+                right.topAnchor.constraint(equalTo: self.container.topAnchor),
+                right.bottomAnchor.constraint(equalTo: self.container.bottomAnchor),
+                right.widthAnchor.constraint(equalToConstant: adjustedRightWidth),
               ])
             }
             // Force layout update for background and text rendering on iOS < 16
