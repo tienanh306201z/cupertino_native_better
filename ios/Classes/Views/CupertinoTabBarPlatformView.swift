@@ -896,6 +896,9 @@ channel.setMethodCallHandler { [weak self] call, result in
                 bar.standardAppearance = ap
                 if #available(iOS 15.0, *) { bar.scrollEdgeAppearance = ap }
               }
+              // Re-apply per-item badges after appearance updates, since
+              // UITabBarAppearance assignment can reset badge styling.
+              self.applyCurrentBadgesToVisibleItems()
             }
           }
           result(nil)
@@ -1102,6 +1105,49 @@ channel.setMethodCallHandler { [weak self] call, result in
     let right = CGFloat(p[3])
     item.imageInsets = UIEdgeInsets(top: top, left: left, bottom: -bottom, right: -right)
     item.titlePositionAdjustment = UIOffset(horizontal: (left - right) / 2, vertical: bottom)
+  }
+
+  /// Re-applies current badge values and per-item badge colors to all live items.
+  /// Needed after appearance/style updates, which can reset badge rendering.
+  private func applyCurrentBadgesToVisibleItems() {
+    let badges = self.currentBadges
+    let badgeColors = self.currentBadgeColors
+    let badgeTextColors = self.currentBadgeTextColors
+
+    func applyBadge(to item: UITabBarItem, index i: Int) {
+      if i < badges.count && !badges[i].isEmpty {
+        item.badgeValue = badges[i] == "\u{200B}" ? "" : badges[i]
+      } else {
+        item.badgeValue = nil
+      }
+
+      if #available(iOS 10.0, *) {
+        if let bc = Self.colorForItem(index: i, colors: badgeColors) {
+          item.badgeColor = bc
+        }
+        if let btc = Self.colorForItem(index: i, colors: badgeTextColors) {
+          item.setBadgeTextAttributes([.foregroundColor: btc], for: .normal)
+          item.setBadgeTextAttributes([.foregroundColor: btc], for: .selected)
+        }
+      }
+    }
+
+    if let bar = self.tabBar, let items = bar.items {
+      for (i, item) in items.enumerated() {
+        applyBadge(to: item, index: i)
+      }
+    }
+
+    if let left = self.tabBarLeft, let leftItems = left.items,
+       let right = self.tabBarRight, let rightItems = right.items {
+      let leftEnd = leftItems.count
+      for (i, item) in leftItems.enumerated() {
+        applyBadge(to: item, index: i)
+      }
+      for (i, item) in rightItems.enumerated() {
+        applyBadge(to: item, index: leftEnd + i)
+      }
+    }
   }
 
   @available(iOS 13.0, *)
