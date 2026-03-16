@@ -34,6 +34,8 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
   private var iconAboveLabel: Bool = true
   private var currentColors: [NSNumber?] = []
   private var currentActiveColors: [NSNumber?] = []
+  private var currentBadgeColors: [NSNumber?] = []
+  private var currentBadgeTextColors: [NSNumber?] = []
 
   init(frame: CGRect, viewId: Int64, args: Any?, messenger: FlutterBinaryMessenger) {
     self.channel = FlutterMethodChannel(name: "CupertinoNativeTabBar_\(viewId)", binaryMessenger: messenger)
@@ -109,6 +111,8 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
           return []
         }
       }
+      currentBadgeColors = (dict["badgeColors"] as? [NSNumber?]) ?? []
+      currentBadgeTextColors = (dict["badgeTextColors"] as? [NSNumber?]) ?? []
     }
 
     // Preload SVG assets dynamically based on what's actually being used
@@ -199,8 +203,23 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
         }
         let title = (i < labels.count && !labels[i].isEmpty) ? labels[i] : nil
         let item = UITabBarItem(title: title, image: image, selectedImage: selectedImage)
+        // Badge: empty string sentinel (\u200B) -> dot; non-empty -> text badge
         if i < badges.count && !badges[i].isEmpty {
-          item.badgeValue = badges[i]
+          item.badgeValue = badges[i] == "\u{200B}" ? "" : badges[i]
+        }
+        if #available(iOS 10.0, *) {
+          if let bc = Self.colorForItem(index: i, colors: colors) {
+            item.badgeColor = Self.colorForItem(index: i, colors: activeColors) != nil
+              ? (Self.colorForItem(index: i, colors: activeColors) ?? bc) : bc
+          }
+          // Per item badge colors override
+          if let bc = Self.colorForItem(index: i, colors: self.currentBadgeColors) {
+            item.badgeColor = bc
+          }
+          if let btc = Self.colorForItem(index: i, colors: self.currentBadgeTextColors) {
+            item.setBadgeTextAttributes([.foregroundColor: btc], for: .normal)
+            item.setBadgeTextAttributes([.foregroundColor: btc], for: .selected)
+          }
         }
         if i < sizes.count, let sizeNum = sizes[i], sizeNum.doubleValue > 25 {
           let offset = CGFloat(sizeNum.doubleValue - 25)
@@ -464,6 +483,10 @@ channel.setMethodCallHandler { [weak self] call, result in
           self.currentColors = colors
           let activeColors = (args["sfSymbolActiveColors"] as? [NSNumber?]) ?? self.currentActiveColors
           self.currentActiveColors = activeColors
+          let badgeColors = (args["badgeColors"] as? [NSNumber?]) ?? self.currentBadgeColors
+          self.currentBadgeColors = badgeColors
+          let badgeTextColors = (args["badgeTextColors"] as? [NSNumber?]) ?? self.currentBadgeTextColors
+          self.currentBadgeTextColors = badgeTextColors
           func buildItems(_ range: Range<Int>) -> [UITabBarItem] {
             var items: [UITabBarItem] = []
             for i in range {
@@ -516,8 +539,18 @@ channel.setMethodCallHandler { [weak self] call, result in
               }
               let title = (i < labels.count && !labels[i].isEmpty) ? labels[i] : nil
               let item = UITabBarItem(title: title, image: image, selectedImage: selectedImage)
+              // Badge: \u200B sentinel -> dot; non-empty -> text badge
               if i < badges.count && !badges[i].isEmpty {
-                item.badgeValue = badges[i]
+                item.badgeValue = badges[i] == "\u{200B}" ? "" : badges[i]
+              }
+              if #available(iOS 10.0, *) {
+                if let bc = Self.colorForItem(index: i, colors: badgeColors) {
+                  item.badgeColor = bc
+                }
+                if let btc = Self.colorForItem(index: i, colors: badgeTextColors) {
+                  item.setBadgeTextAttributes([.foregroundColor: btc], for: .normal)
+                  item.setBadgeTextAttributes([.foregroundColor: btc], for: .selected)
+                }
               }
               if i < sizes.count, let sizeNum = sizes[i] {
                 let pointSize = sizeNum.doubleValue
@@ -590,6 +623,8 @@ channel.setMethodCallHandler { [weak self] call, result in
           let iconSizes = self.currentIconSizes
           let colors = self.currentColors
           let activeColors = self.currentActiveColors
+          let badgeColors = self.currentBadgeColors
+          let badgeTextColors = self.currentBadgeTextColors
           func buildItems(_ range: Range<Int>) -> [UITabBarItem] {
             var items: [UITabBarItem] = []
             for i in range {
@@ -641,8 +676,18 @@ channel.setMethodCallHandler { [weak self] call, result in
               }
               let title = (i < labels.count && !labels[i].isEmpty) ? labels[i] : nil
               let item = UITabBarItem(title: title, image: image, selectedImage: selectedImage)
+              // Badge: \u200B sentinel -> dot; non-empty -> text badge
               if i < badges.count && !badges[i].isEmpty {
-                item.badgeValue = badges[i]
+                item.badgeValue = badges[i] == "\u{200B}" ? "" : badges[i]
+              }
+              if #available(iOS 10.0, *) {
+                if let bc = Self.colorForItem(index: i, colors: badgeColors) {
+                  item.badgeColor = bc
+                }
+                if let btc = Self.colorForItem(index: i, colors: badgeTextColors) {
+                  item.setBadgeTextAttributes([.foregroundColor: btc], for: .normal)
+                  item.setBadgeTextAttributes([.foregroundColor: btc], for: .selected)
+                }
               }
               Self.applyItemPadding(item, index: i, paddings: self.currentItemPaddings)
               items.append(item)
@@ -869,35 +914,34 @@ channel.setMethodCallHandler { [weak self] call, result in
         // Lightweight badge-only update without rebuilding items
         if let args = call.arguments as? [String: Any], let badges = args["badges"] as? [String] {
           self.currentBadges = badges
-          // Update single bar
-          if let bar = self.tabBar, let items = bar.items {
-            for (i, item) in items.enumerated() {
-              if i < badges.count && !badges[i].isEmpty {
-                item.badgeValue = badges[i]
-              } else {
-                item.badgeValue = nil
+          let badgeColors = (args["badgeColors"] as? [NSNumber?]) ?? self.currentBadgeColors
+          self.currentBadgeColors = badgeColors
+          let badgeTextColors = (args["badgeTextColors"] as? [NSNumber?]) ?? self.currentBadgeTextColors
+          self.currentBadgeTextColors = badgeTextColors
+          func applyBadge(to item: UITabBarItem, index i: Int) {
+            if i < badges.count && !badges[i].isEmpty {
+              item.badgeValue = badges[i] == "\u{200B}" ? "" : badges[i]
+            } else {
+              item.badgeValue = nil
+            }
+            if #available(iOS 10.0, *) {
+              if let bc = Self.colorForItem(index: i, colors: badgeColors) { item.badgeColor = bc }
+              if let btc = Self.colorForItem(index: i, colors: badgeTextColors) {
+                item.setBadgeTextAttributes([.foregroundColor: btc], for: .normal)
+                item.setBadgeTextAttributes([.foregroundColor: btc], for: .selected)
               }
             }
+          }
+          // Update single bar
+          if let bar = self.tabBar, let items = bar.items {
+            for (i, item) in items.enumerated() { applyBadge(to: item, index: i) }
           }
           // Update split bars
           if let left = self.tabBarLeft, let leftItems = left.items,
              let right = self.tabBarRight, let rightItems = right.items {
             let leftEnd = leftItems.count
-            for (i, item) in leftItems.enumerated() {
-              if i < badges.count && !badges[i].isEmpty {
-                item.badgeValue = badges[i]
-              } else {
-                item.badgeValue = nil
-              }
-            }
-            for (i, item) in rightItems.enumerated() {
-              let badgeIndex = leftEnd + i
-              if badgeIndex < badges.count && !badges[badgeIndex].isEmpty {
-                item.badgeValue = badges[badgeIndex]
-              } else {
-                item.badgeValue = nil
-              }
-            }
+            for (i, item) in leftItems.enumerated() { applyBadge(to: item, index: i) }
+            for (i, item) in rightItems.enumerated() { applyBadge(to: item, index: leftEnd + i) }
           }
           result(nil)
         } else { result(FlutterError(code: "bad_args", message: "Missing badges", details: nil)) }

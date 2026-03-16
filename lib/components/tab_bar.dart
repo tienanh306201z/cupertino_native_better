@@ -19,6 +19,8 @@ class CNTabBarItem {
     this.icon,
     this.activeIcon,
     this.badge,
+    this.badgeColor,
+    this.badgeTextColor,
     this.customIcon,
     this.activeCustomIcon,
     this.imageAsset,
@@ -37,10 +39,22 @@ class CNTabBarItem {
   /// If not provided, [icon] is used for both states.
   final CNSymbol? activeIcon;
 
-  /// Optional badge text to display on the tab bar item.
-  /// On iOS, this displays as a red badge with the text.
+  /// Optional badge to display on the tab bar item.
+  ///
+  /// - `null` → no badge shown
+  /// - `''` (empty string) → small dot indicator (no text)
+  /// - Any other string → badge with that text (e.g. `'5'`, `'99+'`)
+  ///
   /// On macOS, badges are not supported by NSSegmentedControl.
   final String? badge;
+
+  /// Background color of the badge bubble.
+  /// Defaults to the system red when null.
+  final Color? badgeColor;
+
+  /// Text color of the badge label.
+  /// Defaults to white when null.
+  final Color? badgeTextColor;
 
   /// Optional custom icon for unselected state.
   /// Use icons from CupertinoIcons, Icons, or any custom IconData.
@@ -396,7 +410,13 @@ class _CNTabBarState extends State<CNTabBar> {
     final activeSymbols = widget.items
         .map((e) => e.activeIcon?.name ?? e.icon?.name ?? '')
         .toList();
-    final badges = widget.items.map((e) => e.badge ?? '').toList();
+    final badges = widget.items.map((e) => _encodeBadge(e.badge)).toList();
+    final badgeColors = widget.items
+        .map((e) => resolveColorToArgb(e.badgeColor, context))
+        .toList();
+    final badgeTextColors = widget.items
+        .map((e) => resolveColorToArgb(e.badgeTextColor, context))
+        .toList();
 
     // Extract imageAsset data and resolve asset paths based on device pixel ratio
     final imageAssetPaths = await Future.wait(
@@ -474,6 +494,8 @@ class _CNTabBarState extends State<CNTabBar> {
       'sfSymbols': symbols,
       'activeSfSymbols': activeSymbols,
       'badges': badges,
+      'badgeColors': badgeColors,
+      'badgeTextColors': badgeTextColors,
       'customIconBytes': customIconBytes,
       'activeCustomIconBytes': activeCustomIconBytes,
       'imageAssetPaths': imageAssetPaths,
@@ -730,7 +752,13 @@ class _CNTabBarState extends State<CNTabBar> {
       final activeSymbols = widget.items
           .map((e) => e.activeIcon?.name ?? e.icon?.name ?? '')
           .toList();
-      final badges = widget.items.map((e) => e.badge ?? '').toList();
+      final badges = widget.items.map((e) => _encodeBadge(e.badge)).toList();
+      final badgeColors = widget.items
+          .map((e) => resolveColorToArgb(e.badgeColor, context))
+          .toList();
+      final badgeTextColors = widget.items
+          .map((e) => resolveColorToArgb(e.badgeTextColor, context))
+          .toList();
 
       // Fast path: if ONLY badges changed, use lightweight setBadges method
       final badgesChanged = _lastBadges?.join('|') != badges.join('|');
@@ -744,7 +772,11 @@ class _CNTabBarState extends State<CNTabBar> {
           !symbolsChanged &&
           !activeSymbolsChanged) {
         // Only badges changed - use lightweight update
-        await ch.invokeMethod('setBadges', {'badges': badges});
+        await ch.invokeMethod('setBadges', {
+          'badges': badges,
+          'badgeColors': badgeColors,
+          'badgeTextColors': badgeTextColors,
+        });
         _lastBadges = badges;
         return;
       }
@@ -824,6 +856,8 @@ class _CNTabBarState extends State<CNTabBar> {
           'sfSymbols': symbols,
           'activeSfSymbols': activeSymbols,
           'badges': badges,
+          'badgeColors': badgeColors,
+          'badgeTextColors': badgeTextColors,
           'customIconBytes': customIconBytes,
           'activeCustomIconBytes': activeCustomIconBytes,
           'imageAssetPaths': imageAssetPaths,
@@ -888,8 +922,19 @@ class _CNTabBarState extends State<CNTabBar> {
     _lastActiveSymbols = widget.items
         .map((e) => e.activeIcon?.name ?? e.icon?.name ?? '')
         .toList();
-    _lastBadges = widget.items.map((e) => e.badge ?? '').toList();
+    _lastBadges = widget.items.map((e) => _encodeBadge(e.badge)).toList();
     // Note: Custom icon bytes are cached in _syncPropsToNativeIfNeeded when rendered
+  }
+
+  /// Encodes a badge value for native transfer.
+  ///
+  /// - `null`  → `''`        → no badge rendered
+  /// - `''`    → `'\u200B'`  → dot indicator (empty badge bubble)
+  /// - text    → text        → badge with text
+  static String _encodeBadge(String? badge) {
+    if (badge == null) return '';
+    if (badge.isEmpty) return '\u200B'; // zero-width space sentinel → dot
+    return badge;
   }
 
   Future<void> _requestIntrinsicSize() async {
