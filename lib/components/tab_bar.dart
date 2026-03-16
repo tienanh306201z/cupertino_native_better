@@ -243,6 +243,8 @@ class _CNTabBarState extends State<CNTabBar> {
   // Whether search mode is enabled
   bool get _hasSearch => widget.searchItem != null;
 
+  Future<Map<String, dynamic>?>? _creationParamsFuture;
+
   @override
   void initState() {
     super.initState();
@@ -250,6 +252,21 @@ class _CNTabBarState extends State<CNTabBar> {
     if (_hasSearch) {
       _searchFocusNode = FocusNode();
     }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_creationParamsFuture == null) {
+      final isIOSOrMacOS =
+          defaultTargetPlatform == TargetPlatform.iOS ||
+          defaultTargetPlatform == TargetPlatform.macOS;
+      if (isIOSOrMacOS && PlatformVersion.shouldUseNativeGlass) {
+        _creationParamsFuture = _buildCreationParams();
+      }
+    }
+    _syncBrightnessIfNeeded();
+    _syncPropsToNativeIfNeeded();
   }
 
   @override
@@ -312,36 +329,17 @@ class _CNTabBarState extends State<CNTabBar> {
         isIOSOrMacOS && PlatformVersion.shouldUseNativeGlass;
 
     // Fallback to Flutter widgets for non-iOS/macOS or iOS/macOS < 26
-    if (!shouldUseNative) {
+    if (!shouldUseNative || _creationParamsFuture == null) {
       return _resolveFallback(context);
     }
 
-    // Render custom IconData to bytes.
-    // Issue #5: Show Flutter fallback while loading so user sees a working tab bar instead of empty ~2s.
-    return FutureBuilder<List<List<Uint8List?>>>(
-      future: _renderCustomIcons(),
+    return FutureBuilder<Map<String, dynamic>?>(
+      future: _creationParamsFuture,
       builder: (context, snapshot) {
-        if (!snapshot.hasData) {
+        if (!snapshot.hasData || snapshot.data == null) {
           return _resolveFallback(context);
         }
-
-        final iconBytes = snapshot.data!;
-        final customIconBytes = iconBytes[0];
-        final activeCustomIconBytes = iconBytes[1];
-
-        return FutureBuilder<Widget>(
-          future: _buildNativeTabBar(
-            context,
-            customIconBytes: customIconBytes,
-            activeCustomIconBytes: activeCustomIconBytes,
-          ),
-          builder: (context, snapshot) {
-            if (!snapshot.hasData) {
-              return _resolveFallback(context);
-            }
-            return snapshot.data!;
-          },
-        );
+        return _buildNativeTabBarPlatformView(snapshot.data!);
       },
     );
   }
@@ -382,11 +380,12 @@ class _CNTabBarState extends State<CNTabBar> {
     return [customIconBytes, activeCustomIconBytes];
   }
 
-  Future<Widget> _buildNativeTabBar(
-    BuildContext context, {
-    required List<Uint8List?> customIconBytes,
-    required List<Uint8List?> activeCustomIconBytes,
-  }) async {
+  Future<Map<String, dynamic>?> _buildCreationParams() async {
+    final iconBytes = await _renderCustomIcons();
+    if (!mounted) return null;
+    final customIconBytes = iconBytes[0];
+    final activeCustomIconBytes = iconBytes[1];
+
     // Capture all context-derived values before any async operations
     final capturedDevicePixelRatio = MediaQuery.of(context).devicePixelRatio;
     final capturedIsDark = _isDark;
@@ -424,7 +423,7 @@ class _CNTabBarState extends State<CNTabBar> {
       ),
     );
 
-    if (!mounted) return const SizedBox();
+    if (!mounted) return null;
 
     final sizes = widget.items
         .map((e) => e.icon?.size ?? e.imageAsset?.size)
@@ -477,7 +476,7 @@ class _CNTabBarState extends State<CNTabBar> {
       }),
     );
 
-    if (!mounted) return const SizedBox();
+    if (!mounted) return null;
 
     final creationParams = <String, dynamic>{
       'labels': labels,
@@ -527,7 +526,7 @@ class _CNTabBarState extends State<CNTabBar> {
       },
     };
 
-    return _buildNativeTabBarPlatformView(creationParams);
+    return creationParams;
   }
 
   Map<String, dynamic> _buildSearchStyleParams(BuildContext context) {
@@ -615,9 +614,9 @@ class _CNTabBarState extends State<CNTabBar> {
     return 400;
   }
 
-  Future<Widget> _buildNativeTabBarPlatformView(
+  Widget _buildNativeTabBarPlatformView(
     Map<String, dynamic> creationParams,
-  ) async {
+  ) {
     final viewType = 'CupertinoNativeTabBar';
     final platformView = defaultTargetPlatform == TargetPlatform.iOS
         ? UiKitView(
@@ -886,12 +885,7 @@ class _CNTabBarState extends State<CNTabBar> {
     }
   }
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _syncBrightnessIfNeeded();
-    _syncPropsToNativeIfNeeded();
-  }
+
 
   Future<void> _syncBrightnessIfNeeded() async {
     final ch = _channel;
