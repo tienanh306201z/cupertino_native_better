@@ -595,7 +595,6 @@ channel.setMethodCallHandler { [weak self] call, result in
             }
             return nil
           }()
-          let labelStyle = self.currentLabelStyle
           let iconSizes = self.currentIconSizes
           let colors = self.currentColors
           let activeColors = self.currentActiveColors
