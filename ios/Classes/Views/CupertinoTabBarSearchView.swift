@@ -13,7 +13,10 @@ class CupertinoTabBarSearchPlatformView: NSObject, FlutterPlatformView, UITabBar
     private var currentLabels: [String] = []
     private var currentSymbols: [String] = []
     private var currentActiveSymbols: [String] = []
+    private var currentBadges: [String] = []
     private var currentBadgeCounts: [Int?] = []
+    private var currentBadgeColors: [NSNumber?] = []
+    private var currentBadgeTextColors: [NSNumber?] = []
     private var selectedIndex: Int = 0
     private var tintColor: UIColor?
     private var unselectedTintColor: UIColor?
@@ -34,9 +37,12 @@ class CupertinoTabBarSearchPlatformView: NSObject, FlutterPlatformView, UITabBar
             currentLabels = (dict["labels"] as? [String]) ?? []
             currentSymbols = (dict["sfSymbols"] as? [String]) ?? []
             currentActiveSymbols = (dict["activeSfSymbols"] as? [String]) ?? []
+            currentBadges = (dict["badges"] as? [String]) ?? []
             if let badgeData = dict["badgeCounts"] as? [NSNumber?] {
                 currentBadgeCounts = badgeData.map { $0?.intValue }
             }
+            currentBadgeColors = Self.extractNullableNumbers(dict["badgeColors"])
+            currentBadgeTextColors = Self.extractNullableNumbers(dict["badgeTextColors"])
             if let v = dict["selectedIndex"] as? NSNumber {
                 selectedIndex = v.intValue
             }
@@ -119,6 +125,7 @@ class CupertinoTabBarSearchPlatformView: NSObject, FlutterPlatformView, UITabBar
             let symbol = i < currentSymbols.count ? currentSymbols[i] : "circle"
             let activeSymbol = i < currentActiveSymbols.count && !currentActiveSymbols[i].isEmpty
                 ? currentActiveSymbols[i] : symbol
+            let badge = i < currentBadges.count ? currentBadges[i] : ""
             let badgeCount = i < currentBadgeCounts.count ? currentBadgeCounts[i] : nil
 
             var image: UIImage? = nil
@@ -142,10 +149,23 @@ class CupertinoTabBarSearchPlatformView: NSObject, FlutterPlatformView, UITabBar
             item.tag = i
 
             // Set badge value if provided
-            if let count = badgeCount, count > 0 {
+            if !badge.isEmpty {
+                item.badgeValue = badge == "\u{200B}" ? "" : badge
+            } else if let count = badgeCount, count > 0 {
                 item.badgeValue = count > 99 ? "99+" : String(count)
             } else {
                 item.badgeValue = nil
+            }
+
+            // Apply per-item badge colors from Flutter params when provided
+            if #available(iOS 10.0, *) {
+                if let bg = Self.colorForItem(index: i, colors: currentBadgeColors) {
+                    item.badgeColor = bg
+                }
+                if let text = Self.colorForItem(index: i, colors: currentBadgeTextColors) {
+                    item.setBadgeTextAttributes([.foregroundColor: text], for: .normal)
+                    item.setBadgeTextAttributes([.foregroundColor: text], for: .selected)
+                }
             }
 
             items.append(item)
@@ -244,9 +264,16 @@ class CupertinoTabBarSearchPlatformView: NSObject, FlutterPlatformView, UITabBar
                     self.currentLabels = (args["labels"] as? [String]) ?? []
                     self.currentSymbols = (args["sfSymbols"] as? [String]) ?? []
                     self.currentActiveSymbols = (args["activeSfSymbols"] as? [String]) ?? []
+                    self.currentBadges = (args["badges"] as? [String]) ?? self.currentBadges
                     if let badgeData = args["badgeCounts"] as? [NSNumber?] {
                         self.currentBadgeCounts = badgeData.map { $0?.intValue }
                     }
+                    self.currentBadgeColors = args["badgeColors"] != nil
+                        ? Self.extractNullableNumbers(args["badgeColors"])
+                        : self.currentBadgeColors
+                    self.currentBadgeTextColors = args["badgeTextColors"] != nil
+                        ? Self.extractNullableNumbers(args["badgeTextColors"])
+                        : self.currentBadgeTextColors
 
                     self.tabBar?.items = self.buildTabItems()
 
@@ -286,13 +313,61 @@ class CupertinoTabBarSearchPlatformView: NSObject, FlutterPlatformView, UITabBar
                     result(FlutterError(code: "bad_args", message: "Missing badge counts", details: nil))
                 }
 
-            case "refresh", "setLabels", "setSfSymbols", "setBadges", "setLayout":
+            case "setBadges":
+                if let args = call.arguments as? [String: Any],
+                   let badges = args["badges"] as? [String] {
+                    self.currentBadges = badges
+                    self.currentBadgeColors = args["badgeColors"] != nil
+                        ? Self.extractNullableNumbers(args["badgeColors"])
+                        : self.currentBadgeColors
+                    self.currentBadgeTextColors = args["badgeTextColors"] != nil
+                        ? Self.extractNullableNumbers(args["badgeTextColors"])
+                        : self.currentBadgeTextColors
+
+                    if let bar = self.tabBar, let items = bar.items {
+                        for (index, item) in items.enumerated() {
+                            if index == self.searchItemIndex { continue }
+
+                            if index < badges.count && !badges[index].isEmpty {
+                                item.badgeValue = badges[index] == "\u{200B}" ? "" : badges[index]
+                            } else {
+                                item.badgeValue = nil
+                            }
+
+                            if #available(iOS 10.0, *) {
+                                if let bg = Self.colorForItem(index: index, colors: self.currentBadgeColors) {
+                                    item.badgeColor = bg
+                                }
+                                if let text = Self.colorForItem(index: index, colors: self.currentBadgeTextColors) {
+                                    item.setBadgeTextAttributes([.foregroundColor: text], for: .normal)
+                                    item.setBadgeTextAttributes([.foregroundColor: text], for: .selected)
+                                }
+                            }
+                        }
+                    }
+
+                    result(nil)
+                } else {
+                    result(FlutterError(code: "bad_args", message: "Missing badges", details: nil))
+                }
+
+            case "refresh", "setLabels", "setSfSymbols", "setLayout":
                 result(nil)
 
             default:
                 result(FlutterMethodNotImplemented)
             }
         }
+    }
+
+    private static func extractNullableNumbers(_ value: Any?) -> [NSNumber?] {
+        guard let array = value as? [Any] else { return [] }
+        return array.map { $0 is NSNull ? nil : ($0 as? NSNumber) }
+    }
+
+    private static func colorForItem(index: Int, colors: [NSNumber?]) -> UIColor? {
+        guard index < colors.count, let argb = colors[index] else { return nil }
+        return ImageUtils.colorFromARGB(argb.intValue)
     }
 
     // Rebuild tab items with current colors (called when style changes)
