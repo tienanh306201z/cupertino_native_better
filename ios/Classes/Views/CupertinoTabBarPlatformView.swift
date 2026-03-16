@@ -281,13 +281,13 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
           left.leadingAnchor.constraint(equalTo: guide.leadingAnchor),
           left.topAnchor.constraint(equalTo: container.topAnchor),
           left.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-          left.widthAnchor.constraint(equalToConstant: adjustedLeftWidth),
+          left.widthAnchor.constraint(lessThanOrEqualToConstant: adjustedLeftWidth),
           
           right.leadingAnchor.constraint(equalTo: left.trailingAnchor, constant: spacing),
           right.trailingAnchor.constraint(equalTo: guide.trailingAnchor),
           right.topAnchor.constraint(equalTo: container.topAnchor),
           right.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-          right.widthAnchor.constraint(equalToConstant: adjustedRightWidth),
+          right.widthAnchor.constraint(lessThanOrEqualToConstant: adjustedRightWidth),
         ])
       }
       // Force layout update for background and text rendering on iOS < 16
@@ -706,13 +706,13 @@ channel.setMethodCallHandler { [weak self] call, result in
                 left.leadingAnchor.constraint(equalTo: guide.leadingAnchor),
                 left.topAnchor.constraint(equalTo: self.container.topAnchor),
                 left.bottomAnchor.constraint(equalTo: self.container.bottomAnchor),
-                left.widthAnchor.constraint(equalToConstant: adjustedLeftWidth),
+                left.widthAnchor.constraint(lessThanOrEqualToConstant: adjustedLeftWidth),
                 
                 right.leadingAnchor.constraint(equalTo: left.trailingAnchor, constant: spacing),
                 right.trailingAnchor.constraint(equalTo: guide.trailingAnchor),
                 right.topAnchor.constraint(equalTo: self.container.topAnchor),
                 right.bottomAnchor.constraint(equalTo: self.container.bottomAnchor),
-                right.widthAnchor.constraint(equalToConstant: adjustedRightWidth),
+                right.widthAnchor.constraint(lessThanOrEqualToConstant: adjustedRightWidth),
               ])
             }
             // Force layout update for background and text rendering on iOS < 16
