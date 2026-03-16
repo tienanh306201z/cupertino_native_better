@@ -208,11 +208,6 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
           item.badgeValue = badges[i] == "\u{200B}" ? "" : badges[i]
         }
         if #available(iOS 10.0, *) {
-          if let bc = Self.colorForItem(index: i, colors: colors) {
-            item.badgeColor = Self.colorForItem(index: i, colors: activeColors) != nil
-              ? (Self.colorForItem(index: i, colors: activeColors) ?? bc) : bc
-          }
-          // Per item badge colors override
           if let bc = Self.colorForItem(index: i, colors: self.currentBadgeColors) {
             item.badgeColor = bc
           }
