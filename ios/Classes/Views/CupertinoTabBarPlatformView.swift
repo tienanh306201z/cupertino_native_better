@@ -491,10 +491,6 @@ channel.setMethodCallHandler { [weak self] call, result in
           self.currentBadgeDotSizes = badgeDotSizes
           let badgeFontSizes = args["badgeFontSizes"] != nil ? Self.extractNullableNumbers(args["badgeFontSizes"]) : self.currentBadgeFontSizes
           self.currentBadgeFontSizes = badgeFontSizes
-          let badgeDotSizes = args["badgeDotSizes"] != nil ? Self.extractNullableNumbers(args["badgeDotSizes"]) : self.currentBadgeDotSizes
-          self.currentBadgeDotSizes = badgeDotSizes
-          let badgeFontSizes = args["badgeFontSizes"] != nil ? Self.extractNullableNumbers(args["badgeFontSizes"]) : self.currentBadgeFontSizes
-          self.currentBadgeFontSizes = badgeFontSizes
           func buildItems(_ range: Range<Int>) -> [UITabBarItem] {
             var items: [UITabBarItem] = []
             for i in range {
