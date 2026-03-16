@@ -145,10 +145,15 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
       ap.shadowColor = .clear
       ap.shadowImage = UIImage()
       Self.applyLabelStyle(to: ap, labelStyle: self.currentLabelStyle, tint: tint)
-      let badgeBackground = Self.firstNonNilColor(colors: self.currentBadgeColors)
-      let badgeText = Self.firstNonNilColor(colors: self.currentBadgeTextColors)
-      let badgeFontSize = Self.firstNonNilCGFloat(values: self.currentBadgeFontSizes)
-      Self.applyBadgeStyle(to: ap, badgeBackground: badgeBackground, badgeText: badgeText, badgeFontSize: badgeFontSize)
+      let hasCustomBadgeSizing =
+        Self.hasAnyPositive(values: self.currentBadgeDotSizes) ||
+        Self.hasAnyPositive(values: self.currentBadgeFontSizes)
+      if !hasCustomBadgeSizing {
+        let badgeBackground = Self.firstNonNilColor(colors: self.currentBadgeColors)
+        let badgeText = Self.firstNonNilColor(colors: self.currentBadgeTextColors)
+        let badgeFontSize = Self.firstNonNilCGFloat(values: self.currentBadgeFontSizes)
+        Self.applyBadgeStyle(to: ap, badgeBackground: badgeBackground, badgeText: badgeText, badgeFontSize: badgeFontSize)
+      }
       return ap
     }
     return nil
@@ -617,10 +622,15 @@ channel.setMethodCallHandler { [weak self] call, result in
               ap.shadowColor = .clear
               ap.shadowImage = UIImage()
               Self.applyLabelStyle(to: ap, labelStyle: labelStyle, tint: nil)
-              let badgeBackground = Self.firstNonNilColor(colors: self.currentBadgeColors)
-              let badgeText = Self.firstNonNilColor(colors: self.currentBadgeTextColors)
-              let badgeFontSize = Self.firstNonNilCGFloat(values: self.currentBadgeFontSizes)
-              Self.applyBadgeStyle(to: ap, badgeBackground: badgeBackground, badgeText: badgeText, badgeFontSize: badgeFontSize)
+              let hasCustomBadgeSizing =
+                Self.hasAnyPositive(values: self.currentBadgeDotSizes) ||
+                Self.hasAnyPositive(values: self.currentBadgeFontSizes)
+              if !hasCustomBadgeSizing {
+                let badgeBackground = Self.firstNonNilColor(colors: self.currentBadgeColors)
+                let badgeText = Self.firstNonNilColor(colors: self.currentBadgeTextColors)
+                let badgeFontSize = Self.firstNonNilCGFloat(values: self.currentBadgeFontSizes)
+                Self.applyBadgeStyle(to: ap, badgeBackground: badgeBackground, badgeText: badgeText, badgeFontSize: badgeFontSize)
+              }
               return ap
             }
             return nil
@@ -902,10 +912,15 @@ channel.setMethodCallHandler { [weak self] call, result in
                 ap.shadowColor = .clear
                 ap.shadowImage = UIImage()
                 Self.applyLabelStyle(to: ap, labelStyle: ls, tint: tintColor ?? bar.tintColor)
-                let badgeBackground = Self.firstNonNilColor(colors: self.currentBadgeColors)
-                let badgeText = Self.firstNonNilColor(colors: self.currentBadgeTextColors)
-                let badgeFontSize = Self.firstNonNilCGFloat(values: self.currentBadgeFontSizes)
-                Self.applyBadgeStyle(to: ap, badgeBackground: badgeBackground, badgeText: badgeText, badgeFontSize: badgeFontSize)
+                  let hasCustomBadgeSizing =
+                    Self.hasAnyPositive(values: self.currentBadgeDotSizes) ||
+                    Self.hasAnyPositive(values: self.currentBadgeFontSizes)
+                  if !hasCustomBadgeSizing {
+                    let badgeBackground = Self.firstNonNilColor(colors: self.currentBadgeColors)
+                    let badgeText = Self.firstNonNilColor(colors: self.currentBadgeTextColors)
+                    let badgeFontSize = Self.firstNonNilCGFloat(values: self.currentBadgeFontSizes)
+                    Self.applyBadgeStyle(to: ap, badgeBackground: badgeBackground, badgeText: badgeText, badgeFontSize: badgeFontSize)
+                  }
                 bar.standardAppearance = ap
                 if #available(iOS 15.0, *) { bar.scrollEdgeAppearance = ap }
               }
@@ -941,10 +956,15 @@ channel.setMethodCallHandler { [weak self] call, result in
               ap.shadowColor = .clear
               ap.shadowImage = UIImage()
               Self.applyLabelStyle(to: ap, labelStyle: self.currentLabelStyle, tint: bar.tintColor)
-              let badgeBackground = Self.firstNonNilColor(colors: badgeColors)
-              let badgeText = Self.firstNonNilColor(colors: badgeTextColors)
-              let badgeFontSize = Self.firstNonNilCGFloat(values: badgeFontSizes)
-              Self.applyBadgeStyle(to: ap, badgeBackground: badgeBackground, badgeText: badgeText, badgeFontSize: badgeFontSize)
+              let hasCustomBadgeSizing =
+                Self.hasAnyPositive(values: badgeDotSizes) ||
+                Self.hasAnyPositive(values: badgeFontSizes)
+              if !hasCustomBadgeSizing {
+                let badgeBackground = Self.firstNonNilColor(colors: badgeColors)
+                let badgeText = Self.firstNonNilColor(colors: badgeTextColors)
+                let badgeFontSize = Self.firstNonNilCGFloat(values: badgeFontSizes)
+                Self.applyBadgeStyle(to: ap, badgeBackground: badgeBackground, badgeText: badgeText, badgeFontSize: badgeFontSize)
+              }
               bar.standardAppearance = ap
               if #available(iOS 15.0, *) { bar.scrollEdgeAppearance = ap }
             }
@@ -1153,6 +1173,15 @@ channel.setMethodCallHandler { [weak self] call, result in
       }
     }
     return nil
+  }
+
+  private static func hasAnyPositive(values: [NSNumber?]) -> Bool {
+    for value in values {
+      if let value = value, CGFloat(truncating: value) > 0 {
+        return true
+      }
+    }
+    return false
   }
 
   @available(iOS 13.0, *)
