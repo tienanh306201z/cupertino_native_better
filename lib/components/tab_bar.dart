@@ -233,10 +233,10 @@ class _CNTabBarState extends State<CNTabBar> {
   bool? _lastIsDark;
   double? _intrinsicHeight;
   double? _intrinsicWidth;
-  List<String>? _lastLabels;
-  List<String>? _lastSymbols;
-  List<String>? _lastActiveSymbols;
-  List<String>? _lastBadges;
+  // Comprehensive fingerprint covering ALL item properties (colors, assets, icons, etc.)
+  String? _lastItemsFingerprint;
+  // Separate fingerprint for the fast badges-only lightweight path
+  String? _lastBadgesFingerprint;
   bool? _lastSplit;
   int? _lastRightCount;
   double? _lastSplitSpacing;
@@ -760,32 +760,30 @@ class _CNTabBarState extends State<CNTabBar> {
           .map((e) => resolveColorToArgb(e.badgeTextColor, context))
           .toList();
 
-      // Fast path: if ONLY badges changed, use lightweight setBadges method
-      final badgesChanged = _lastBadges?.join('|') != badges.join('|');
-      final labelsChanged = _lastLabels?.join('|') != labels.join('|');
-      final symbolsChanged = _lastSymbols?.join('|') != symbols.join('|');
-      final activeSymbolsChanged =
-          _lastActiveSymbols?.join('|') != activeSymbols.join('|');
+      // Compute comprehensive fingerprint covering ALL item properties
+      final currentFingerprint = _itemsFingerprint();
+      final currentBadgesFingerprint = _badgesFingerprint();
+      final itemsChanged = currentFingerprint != _lastItemsFingerprint;
+      final onlyBadgesChanged = !itemsChanged
+          ? false
+          : (currentBadgesFingerprint != _lastBadgesFingerprint &&
+              // Verify that only badge-related fields changed by checking the
+              // non-badge parts of the fingerprint match
+              _nonBadgePart(currentFingerprint) == _nonBadgePart(_lastItemsFingerprint ?? ''));
 
-      if (badgesChanged &&
-          !labelsChanged &&
-          !symbolsChanged &&
-          !activeSymbolsChanged) {
-        // Only badges changed - use lightweight update
+      if (onlyBadgesChanged) {
+        // Only badge values/colors changed — use lightweight update
         await ch.invokeMethod('setBadges', {
           'badges': badges,
           'badgeColors': badgeColors,
           'badgeTextColors': badgeTextColors,
         });
-        _lastBadges = badges;
+        _lastBadgesFingerprint = currentBadgesFingerprint;
+        _lastItemsFingerprint = currentFingerprint;
         return;
       }
 
-      // Check if basic properties changed
-      if (labelsChanged ||
-          symbolsChanged ||
-          activeSymbolsChanged ||
-          badgesChanged) {
+      if (itemsChanged) {
         final colors = widget.items
             .map(
               (e) => resolveColorToArgb(
@@ -872,10 +870,8 @@ class _CNTabBarState extends State<CNTabBar> {
           'sfSymbolColors': colors,
           'sfSymbolActiveColors': activeColors,
         });
-        _lastLabels = labels;
-        _lastSymbols = symbols;
-        _lastActiveSymbols = activeSymbols;
-        _lastBadges = badges;
+        _lastItemsFingerprint = currentFingerprint;
+        _lastBadgesFingerprint = currentBadgesFingerprint;
         // Re-measure width in case content changed
         _requestIntrinsicSize();
       }
@@ -917,13 +913,67 @@ class _CNTabBarState extends State<CNTabBar> {
   }
 
   void _cacheItems() {
-    _lastLabels = widget.items.map((e) => e.label ?? '').toList();
-    _lastSymbols = widget.items.map((e) => e.icon?.name ?? '').toList();
-    _lastActiveSymbols = widget.items
-        .map((e) => e.activeIcon?.name ?? e.icon?.name ?? '')
-        .toList();
-    _lastBadges = widget.items.map((e) => _encodeBadge(e.badge)).toList();
-    // Note: Custom icon bytes are cached in _syncPropsToNativeIfNeeded when rendered
+    _lastItemsFingerprint = _itemsFingerprint();
+    _lastBadgesFingerprint = _badgesFingerprint();
+  }
+
+  /// Fingerprint covering ALL item properties that can change at runtime.
+  /// This ensures any change — imageAssets, icon colors (theme), badge colors,
+  /// custom icons, padding — triggers a native update.
+  String _itemsFingerprint() {
+    return widget.items.map((e) {
+      // Context-resolved colors are needed for theme sensitivity
+      final iconColor = resolveColorToArgb(e.icon?.color ?? e.imageAsset?.color, context);
+      final activeColor = resolveColorToArgb(
+        e.activeIcon?.color ?? e.activeImageAsset?.color ??
+        e.icon?.color ?? e.imageAsset?.color,
+        context,
+      );
+      final badgeColor = resolveColorToArgb(e.badgeColor, context);
+      final badgeTextColor = resolveColorToArgb(e.badgeTextColor, context);
+      return [
+        e.label ?? '',
+        e.icon?.name ?? '',
+        e.icon?.size.toString() ?? '',
+        e.activeIcon?.name ?? '',
+        _encodeBadge(e.badge),
+        iconColor?.toString() ?? '',
+        activeColor?.toString() ?? '',
+        badgeColor?.toString() ?? '',
+        badgeTextColor?.toString() ?? '',
+        e.imageAsset?.assetPath ?? '',
+        e.imageAsset?.size.toString() ?? '',
+        e.activeImageAsset?.assetPath ?? '',
+        e.activeImageAsset?.size.toString() ?? '',
+        e.customIcon?.hashCode.toString() ?? '',
+        e.activeCustomIcon?.hashCode.toString() ?? '',
+        e.padding?.toString() ?? '',
+      ].join('\x00');
+    }).join('\x01');
+  }
+
+  /// Fingerprint for badges only (used in the fast badges-only update path).
+  String _badgesFingerprint() {
+    return widget.items.map((e) => [
+      _encodeBadge(e.badge),
+      resolveColorToArgb(e.badgeColor, context)?.toString() ?? '',
+      resolveColorToArgb(e.badgeTextColor, context)?.toString() ?? '',
+    ].join('\x00')).join('\x01');
+  }
+
+  /// Extracts the non-badge parts of a fingerprint.
+  String _nonBadgePart(String fingerprint) {
+    if (fingerprint.isEmpty) return '';
+    return fingerprint.split('\x01').map((itemStr) {
+      final parts = itemStr.split('\x00');
+      if (parts.length >= 16) {
+        // Badges are encoded at indices 4, 7, 8 in _itemsFingerprint
+        parts[4] = '';
+        parts[7] = '';
+        parts[8] = '';
+      }
+      return parts.join('\x00');
+    }).join('\x01');
   }
 
   /// Encodes a badge value for native transfer.
@@ -943,8 +993,10 @@ class _CNTabBarState extends State<CNTabBar> {
     if (ch == null) return;
     try {
       final size = await ch.invokeMethod<Map>('getIntrinsicSize');
-      final h = (size?['height'] as num?)?.toDouble();
-      final w = (size?['width'] as num?)?.toDouble();
+      final hNum = size?['height'] as num?;
+      final wNum = size?['width'] as num?;
+      final h = hNum?.toDouble();
+      final w = wNum?.toDouble();
       if (!mounted) return;
       setState(() {
         if (h != null && h > 0) _intrinsicHeight = h;

@@ -111,8 +111,8 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
           return []
         }
       }
-      currentBadgeColors = (dict["badgeColors"] as? [NSNumber?]) ?? []
-      currentBadgeTextColors = (dict["badgeTextColors"] as? [NSNumber?]) ?? []
+      currentBadgeColors = Self.extractNullableNumbers(dict["badgeColors"])
+      currentBadgeTextColors = Self.extractNullableNumbers(dict["badgeTextColors"])
     }
 
     // Preload SVG assets dynamically based on what's actually being used
@@ -478,9 +478,9 @@ channel.setMethodCallHandler { [weak self] call, result in
           self.currentColors = colors
           let activeColors = (args["sfSymbolActiveColors"] as? [NSNumber?]) ?? self.currentActiveColors
           self.currentActiveColors = activeColors
-          let badgeColors = (args["badgeColors"] as? [NSNumber?]) ?? self.currentBadgeColors
+          let badgeColors = args["badgeColors"] != nil ? Self.extractNullableNumbers(args["badgeColors"]) : self.currentBadgeColors
           self.currentBadgeColors = badgeColors
-          let badgeTextColors = (args["badgeTextColors"] as? [NSNumber?]) ?? self.currentBadgeTextColors
+          let badgeTextColors = args["badgeTextColors"] != nil ? Self.extractNullableNumbers(args["badgeTextColors"]) : self.currentBadgeTextColors
           self.currentBadgeTextColors = badgeTextColors
           func buildItems(_ range: Range<Int>) -> [UITabBarItem] {
             var items: [UITabBarItem] = []
@@ -909,9 +909,9 @@ channel.setMethodCallHandler { [weak self] call, result in
         // Lightweight badge-only update without rebuilding items
         if let args = call.arguments as? [String: Any], let badges = args["badges"] as? [String] {
           self.currentBadges = badges
-          let badgeColors = (args["badgeColors"] as? [NSNumber?]) ?? self.currentBadgeColors
+          let badgeColors = args["badgeColors"] != nil ? Self.extractNullableNumbers(args["badgeColors"]) : self.currentBadgeColors
           self.currentBadgeColors = badgeColors
-          let badgeTextColors = (args["badgeTextColors"] as? [NSNumber?]) ?? self.currentBadgeTextColors
+          let badgeTextColors = args["badgeTextColors"] != nil ? Self.extractNullableNumbers(args["badgeTextColors"]) : self.currentBadgeTextColors
           self.currentBadgeTextColors = badgeTextColors
           func applyBadge(to item: UITabBarItem, index i: Int) {
             if i < badges.count && !badges[i].isEmpty {
@@ -1059,6 +1059,13 @@ channel.setMethodCallHandler { [weak self] call, result in
     }
   }
 
+  /// Safely extracts a [NSNumber?] array from a value received via Flutter's StandardMessageCodec.
+  /// Dart null values arrive as NSNull objects, which break `as? [NSNumber?]` casts.
+  /// This method maps NSNull → nil and Any → NSNumber? correctly.
+  private static func extractNullableNumbers(_ value: Any?) -> [NSNumber?] {
+    guard let array = value as? [Any] else { return [] }
+    return array.map { $0 is NSNull ? nil : ($0 as? NSNumber) }
+  }
 
   private static func forceStackedLayout(on tabBar: UITabBar) {
     if #available(iOS 17.0, *) {
