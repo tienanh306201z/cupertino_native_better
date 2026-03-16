@@ -161,10 +161,16 @@ class CupertinoTabBarSearchPlatformView: NSObject, FlutterPlatformView, UITabBar
             if #available(iOS 10.0, *) {
                 if let bg = Self.colorForItem(index: i, colors: currentBadgeColors) {
                     item.badgeColor = bg
+                        #if DEBUG
+                        print("[cupertino_native_better][native] (search) Tab \(i) badgeColor set to: \(bg)")
+                        #endif
                 }
                 if let text = Self.colorForItem(index: i, colors: currentBadgeTextColors) {
                     item.setBadgeTextAttributes([.foregroundColor: text], for: .normal)
                     item.setBadgeTextAttributes([.foregroundColor: text], for: .selected)
+                        #if DEBUG
+                        print("[cupertino_native_better][native] (search) Tab \(i) badgeTextColor set to: \(text)")
+                        #endif
                 }
             }
 

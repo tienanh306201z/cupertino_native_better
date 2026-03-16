@@ -208,13 +208,19 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
           item.badgeValue = badges[i] == "\u{200B}" ? "" : badges[i]
         }
         if #available(iOS 10.0, *) {
-          if let bc = Self.colorForItem(index: i, colors: self.currentBadgeColors) {
-            item.badgeColor = bc
-          }
-          if let btc = Self.colorForItem(index: i, colors: self.currentBadgeTextColors) {
-            item.setBadgeTextAttributes([.foregroundColor: btc], for: .normal)
-            item.setBadgeTextAttributes([.foregroundColor: btc], for: .selected)
-          }
+                if let bc = Self.colorForItem(index: i, colors: self.currentBadgeColors) {
+                  item.badgeColor = bc
+                  #if DEBUG
+                  print("[cupertino_native_better][native] Tab \(i) badgeColor set to: \(bc)")
+                  #endif
+                }
+                if let btc = Self.colorForItem(index: i, colors: self.currentBadgeTextColors) {
+                  item.setBadgeTextAttributes([.foregroundColor: btc], for: .normal)
+                  item.setBadgeTextAttributes([.foregroundColor: btc], for: .selected)
+                  #if DEBUG
+                  print("[cupertino_native_better][native] Tab \(i) badgeTextColor set to: \(btc)")
+                  #endif
+                }
         }
         if i < sizes.count, let sizeNum = sizes[i], sizeNum.doubleValue > 25 {
           let offset = CGFloat(sizeNum.doubleValue - 25)
