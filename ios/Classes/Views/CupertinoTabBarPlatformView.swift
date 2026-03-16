@@ -36,6 +36,8 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
   private var currentActiveColors: [NSNumber?] = []
   private var currentBadgeColors: [NSNumber?] = []
   private var currentBadgeTextColors: [NSNumber?] = []
+  private var currentBadgeDotSizes: [NSNumber?] = []
+  private var currentBadgeFontSizes: [NSNumber?] = []
 
   init(frame: CGRect, viewId: Int64, args: Any?, messenger: FlutterBinaryMessenger) {
     self.channel = FlutterMethodChannel(name: "CupertinoNativeTabBar_\(viewId)", binaryMessenger: messenger)
@@ -113,6 +115,8 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
       }
       currentBadgeColors = Self.extractNullableNumbers(dict["badgeColors"])
       currentBadgeTextColors = Self.extractNullableNumbers(dict["badgeTextColors"])
+      currentBadgeDotSizes = Self.extractNullableNumbers(dict["badgeDotSizes"])
+      currentBadgeFontSizes = Self.extractNullableNumbers(dict["badgeFontSizes"])
     }
 
     // Preload SVG assets dynamically based on what's actually being used
@@ -143,7 +147,8 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
       Self.applyLabelStyle(to: ap, labelStyle: self.currentLabelStyle, tint: tint)
       let badgeBackground = Self.firstNonNilColor(colors: self.currentBadgeColors)
       let badgeText = Self.firstNonNilColor(colors: self.currentBadgeTextColors)
-      Self.applyBadgeStyle(to: ap, badgeBackground: badgeBackground, badgeText: badgeText)
+      let badgeFontSize = Self.firstNonNilCGFloat(values: self.currentBadgeFontSizes)
+      Self.applyBadgeStyle(to: ap, badgeBackground: badgeBackground, badgeText: badgeText, badgeFontSize: badgeFontSize)
       return ap
     }
     return nil
@@ -206,25 +211,16 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
         }
         let title = (i < labels.count && !labels[i].isEmpty) ? labels[i] : nil
         let item = UITabBarItem(title: title, image: image, selectedImage: selectedImage)
-        // Badge: empty string sentinel (\u200B) -> dot; non-empty -> text badge
-        if i < badges.count && !badges[i].isEmpty {
-          item.badgeValue = badges[i] == "\u{200B}" ? "" : badges[i]
-        }
-        if #available(iOS 10.0, *) {
-                if let bc = Self.colorForItem(index: i, colors: self.currentBadgeColors) {
-                  item.badgeColor = bc
-                  #if DEBUG
-                  print("[cupertino_native_better][native] Tab \(i) badgeColor set to: \(bc)")
-                  #endif
-                }
-                if let btc = Self.colorForItem(index: i, colors: self.currentBadgeTextColors) {
-                  item.setBadgeTextAttributes([.foregroundColor: btc], for: .normal)
-                  item.setBadgeTextAttributes([.foregroundColor: btc], for: .selected)
-                  #if DEBUG
-                  print("[cupertino_native_better][native] Tab \(i) badgeTextColor set to: \(btc)")
-                  #endif
-                }
-        }
+        let badge = i < badges.count ? badges[i] : ""
+        Self.applyBadge(
+          to: item,
+          index: i,
+          badge: badge,
+          badgeColors: self.currentBadgeColors,
+          badgeTextColors: self.currentBadgeTextColors,
+          badgeDotSizes: self.currentBadgeDotSizes,
+          badgeFontSizes: self.currentBadgeFontSizes
+        )
         if i < sizes.count, let sizeNum = sizes[i], sizeNum.doubleValue > 25 {
           let offset = CGFloat(sizeNum.doubleValue - 25)
           item.titlePositionAdjustment = UIOffset(horizontal: 0, vertical: offset)
@@ -491,6 +487,14 @@ channel.setMethodCallHandler { [weak self] call, result in
           self.currentBadgeColors = badgeColors
           let badgeTextColors = args["badgeTextColors"] != nil ? Self.extractNullableNumbers(args["badgeTextColors"]) : self.currentBadgeTextColors
           self.currentBadgeTextColors = badgeTextColors
+          let badgeDotSizes = args["badgeDotSizes"] != nil ? Self.extractNullableNumbers(args["badgeDotSizes"]) : self.currentBadgeDotSizes
+          self.currentBadgeDotSizes = badgeDotSizes
+          let badgeFontSizes = args["badgeFontSizes"] != nil ? Self.extractNullableNumbers(args["badgeFontSizes"]) : self.currentBadgeFontSizes
+          self.currentBadgeFontSizes = badgeFontSizes
+          let badgeDotSizes = args["badgeDotSizes"] != nil ? Self.extractNullableNumbers(args["badgeDotSizes"]) : self.currentBadgeDotSizes
+          self.currentBadgeDotSizes = badgeDotSizes
+          let badgeFontSizes = args["badgeFontSizes"] != nil ? Self.extractNullableNumbers(args["badgeFontSizes"]) : self.currentBadgeFontSizes
+          self.currentBadgeFontSizes = badgeFontSizes
           func buildItems(_ range: Range<Int>) -> [UITabBarItem] {
             var items: [UITabBarItem] = []
             for i in range {
@@ -543,19 +547,16 @@ channel.setMethodCallHandler { [weak self] call, result in
               }
               let title = (i < labels.count && !labels[i].isEmpty) ? labels[i] : nil
               let item = UITabBarItem(title: title, image: image, selectedImage: selectedImage)
-              // Badge: \u200B sentinel -> dot; non-empty -> text badge
-              if i < badges.count && !badges[i].isEmpty {
-                item.badgeValue = badges[i] == "\u{200B}" ? "" : badges[i]
-              }
-              if #available(iOS 10.0, *) {
-                if let bc = Self.colorForItem(index: i, colors: badgeColors) {
-                  item.badgeColor = bc
-                }
-                if let btc = Self.colorForItem(index: i, colors: badgeTextColors) {
-                  item.setBadgeTextAttributes([.foregroundColor: btc], for: .normal)
-                  item.setBadgeTextAttributes([.foregroundColor: btc], for: .selected)
-                }
-              }
+              let badge = i < badges.count ? badges[i] : ""
+              Self.applyBadge(
+                to: item,
+                index: i,
+                badge: badge,
+                badgeColors: badgeColors,
+                badgeTextColors: badgeTextColors,
+                badgeDotSizes: badgeDotSizes,
+                badgeFontSizes: badgeFontSizes
+              )
               if i < sizes.count, let sizeNum = sizes[i] {
                 let pointSize = sizeNum.doubleValue
                 if pointSize > 25 {
@@ -620,6 +621,10 @@ channel.setMethodCallHandler { [weak self] call, result in
               ap.shadowColor = .clear
               ap.shadowImage = UIImage()
               Self.applyLabelStyle(to: ap, labelStyle: labelStyle, tint: nil)
+              let badgeBackground = Self.firstNonNilColor(colors: self.currentBadgeColors)
+              let badgeText = Self.firstNonNilColor(colors: self.currentBadgeTextColors)
+              let badgeFontSize = Self.firstNonNilCGFloat(values: self.currentBadgeFontSizes)
+              Self.applyBadgeStyle(to: ap, badgeBackground: badgeBackground, badgeText: badgeText, badgeFontSize: badgeFontSize)
               return ap
             }
             return nil
@@ -629,6 +634,8 @@ channel.setMethodCallHandler { [weak self] call, result in
           let activeColors = self.currentActiveColors
           let badgeColors = self.currentBadgeColors
           let badgeTextColors = self.currentBadgeTextColors
+          let badgeDotSizes = self.currentBadgeDotSizes
+          let badgeFontSizes = self.currentBadgeFontSizes
           func buildItems(_ range: Range<Int>) -> [UITabBarItem] {
             var items: [UITabBarItem] = []
             for i in range {
@@ -680,19 +687,16 @@ channel.setMethodCallHandler { [weak self] call, result in
               }
               let title = (i < labels.count && !labels[i].isEmpty) ? labels[i] : nil
               let item = UITabBarItem(title: title, image: image, selectedImage: selectedImage)
-              // Badge: \u200B sentinel -> dot; non-empty -> text badge
-              if i < badges.count && !badges[i].isEmpty {
-                item.badgeValue = badges[i] == "\u{200B}" ? "" : badges[i]
-              }
-              if #available(iOS 10.0, *) {
-                if let bc = Self.colorForItem(index: i, colors: badgeColors) {
-                  item.badgeColor = bc
-                }
-                if let btc = Self.colorForItem(index: i, colors: badgeTextColors) {
-                  item.setBadgeTextAttributes([.foregroundColor: btc], for: .normal)
-                  item.setBadgeTextAttributes([.foregroundColor: btc], for: .selected)
-                }
-              }
+              let badge = i < badges.count ? badges[i] : ""
+              Self.applyBadge(
+                to: item,
+                index: i,
+                badge: badge,
+                badgeColors: badgeColors,
+                badgeTextColors: badgeTextColors,
+                badgeDotSizes: badgeDotSizes,
+                badgeFontSizes: badgeFontSizes
+              )
               Self.applyItemPadding(item, index: i, paddings: self.currentItemPaddings)
               items.append(item)
             }
@@ -904,7 +908,8 @@ channel.setMethodCallHandler { [weak self] call, result in
                 Self.applyLabelStyle(to: ap, labelStyle: ls, tint: tintColor ?? bar.tintColor)
                 let badgeBackground = Self.firstNonNilColor(colors: self.currentBadgeColors)
                 let badgeText = Self.firstNonNilColor(colors: self.currentBadgeTextColors)
-                Self.applyBadgeStyle(to: ap, badgeBackground: badgeBackground, badgeText: badgeText)
+                let badgeFontSize = Self.firstNonNilCGFloat(values: self.currentBadgeFontSizes)
+                Self.applyBadgeStyle(to: ap, badgeBackground: badgeBackground, badgeText: badgeText, badgeFontSize: badgeFontSize)
                 bar.standardAppearance = ap
                 if #available(iOS 15.0, *) { bar.scrollEdgeAppearance = ap }
               }
@@ -938,24 +943,23 @@ channel.setMethodCallHandler { [weak self] call, result in
               Self.applyLabelStyle(to: ap, labelStyle: self.currentLabelStyle, tint: bar.tintColor)
               let badgeBackground = Self.firstNonNilColor(colors: badgeColors)
               let badgeText = Self.firstNonNilColor(colors: badgeTextColors)
-              Self.applyBadgeStyle(to: ap, badgeBackground: badgeBackground, badgeText: badgeText)
+              let badgeFontSize = Self.firstNonNilCGFloat(values: badgeFontSizes)
+              Self.applyBadgeStyle(to: ap, badgeBackground: badgeBackground, badgeText: badgeText, badgeFontSize: badgeFontSize)
               bar.standardAppearance = ap
               if #available(iOS 15.0, *) { bar.scrollEdgeAppearance = ap }
             }
           }
           func applyBadge(to item: UITabBarItem, index i: Int) {
-            if i < badges.count && !badges[i].isEmpty {
-              item.badgeValue = badges[i] == "\u{200B}" ? "" : badges[i]
-            } else {
-              item.badgeValue = nil
-            }
-            if #available(iOS 10.0, *) {
-              if let bc = Self.colorForItem(index: i, colors: badgeColors) { item.badgeColor = bc }
-              if let btc = Self.colorForItem(index: i, colors: badgeTextColors) {
-                item.setBadgeTextAttributes([.foregroundColor: btc], for: .normal)
-                item.setBadgeTextAttributes([.foregroundColor: btc], for: .selected)
-              }
-            }
+            let badge = i < badges.count ? badges[i] : ""
+            Self.applyBadge(
+              to: item,
+              index: i,
+              badge: badge,
+              badgeColors: badgeColors,
+              badgeTextColors: badgeTextColors,
+              badgeDotSizes: badgeDotSizes,
+              badgeFontSizes: badgeFontSizes
+            )
           }
           // Update single bar
           if let bar = self.tabBar, let items = bar.items {
@@ -1141,13 +1145,24 @@ channel.setMethodCallHandler { [weak self] call, result in
     return nil
   }
 
+  private static func firstNonNilCGFloat(values: [NSNumber?]) -> CGFloat? {
+    for value in values {
+      if let value = value {
+        let v = CGFloat(truncating: value)
+        if v > 0 { return v }
+      }
+    }
+    return nil
+  }
+
   @available(iOS 13.0, *)
   private static func applyBadgeStyle(
     to appearance: UITabBarAppearance,
     badgeBackground: UIColor?,
-    badgeText: UIColor?
+    badgeText: UIColor?,
+    badgeFontSize: CGFloat?
   ) {
-    guard badgeBackground != nil || badgeText != nil else { return }
+    guard badgeBackground != nil || badgeText != nil || badgeFontSize != nil else { return }
 
     let states = [
       appearance.stackedLayoutAppearance.normal,
@@ -1162,8 +1177,79 @@ channel.setMethodCallHandler { [weak self] call, result in
       if let badgeBackground = badgeBackground {
         state.badgeBackgroundColor = badgeBackground
       }
+      var attrs: [NSAttributedString.Key: Any] = [:]
       if let badgeText = badgeText {
-        state.badgeTextAttributes = [.foregroundColor: badgeText]
+        attrs[.foregroundColor] = badgeText
+      }
+      if let badgeFontSize = badgeFontSize {
+        attrs[.font] = UIFont.systemFont(ofSize: badgeFontSize, weight: .semibold)
+      }
+      if !attrs.isEmpty {
+        state.badgeTextAttributes = attrs
+      }
+    }
+  }
+
+  private static func numberForItem(index: Int, numbers: [NSNumber?]) -> CGFloat? {
+    guard index < numbers.count, let value = numbers[index] else { return nil }
+    let number = CGFloat(truncating: value)
+    return number > 0 ? number : nil
+  }
+
+  private static func badgeTextAttributes(textColor: UIColor?, fontSize: CGFloat?) -> [NSAttributedString.Key: Any] {
+    var attrs: [NSAttributedString.Key: Any] = [:]
+    if let textColor = textColor {
+      attrs[.foregroundColor] = textColor
+    }
+    if let fontSize = fontSize {
+      attrs[.font] = UIFont.systemFont(ofSize: fontSize, weight: .semibold)
+    }
+    return attrs
+  }
+
+  private static func applyBadge(
+    to item: UITabBarItem,
+    index: Int,
+    badge: String,
+    badgeColors: [NSNumber?],
+    badgeTextColors: [NSNumber?],
+    badgeDotSizes: [NSNumber?],
+    badgeFontSizes: [NSNumber?]
+  ) {
+    if badge.isEmpty {
+      item.badgeValue = nil
+      return
+    }
+
+    let isDot = badge == "\u{200B}"
+    let badgeBackgroundColor = colorForItem(index: index, colors: badgeColors)
+    let badgeTextColor = colorForItem(index: index, colors: badgeTextColors)
+    let badgeDotSize = numberForItem(index: index, numbers: badgeDotSizes)
+    let badgeFontSize = numberForItem(index: index, numbers: badgeFontSizes)
+
+    if isDot, let dotSize = badgeDotSize {
+      item.badgeValue = "●"
+      if #available(iOS 10.0, *) {
+        item.badgeColor = .clear
+        let dotColor = badgeBackgroundColor ?? badgeTextColor ?? UIColor.systemRed
+        let attrs = badgeTextAttributes(textColor: dotColor, fontSize: dotSize)
+        if !attrs.isEmpty {
+          item.setBadgeTextAttributes(attrs, for: .normal)
+          item.setBadgeTextAttributes(attrs, for: .selected)
+        }
+      }
+      return
+    }
+
+    item.badgeValue = isDot ? "" : badge
+    if #available(iOS 10.0, *) {
+      if let badgeBackgroundColor = badgeBackgroundColor {
+        item.badgeColor = badgeBackgroundColor
+      }
+      let attrs = badgeTextAttributes(textColor: badgeTextColor, fontSize: badgeFontSize)
+      if !attrs.isEmpty {
+        item.setBadgeTextAttributes(attrs, for: .normal)
+        item.setBadgeTextAttributes(attrs, for: .selected)
       }
     }
   }
@@ -1174,23 +1260,20 @@ channel.setMethodCallHandler { [weak self] call, result in
     let badges = self.currentBadges
     let badgeColors = self.currentBadgeColors
     let badgeTextColors = self.currentBadgeTextColors
+    let badgeDotSizes = self.currentBadgeDotSizes
+    let badgeFontSizes = self.currentBadgeFontSizes
 
     func applyBadge(to item: UITabBarItem, index i: Int) {
-      if i < badges.count && !badges[i].isEmpty {
-        item.badgeValue = badges[i] == "\u{200B}" ? "" : badges[i]
-      } else {
-        item.badgeValue = nil
-      }
-
-      if #available(iOS 10.0, *) {
-        if let bc = Self.colorForItem(index: i, colors: badgeColors) {
-          item.badgeColor = bc
-        }
-        if let btc = Self.colorForItem(index: i, colors: badgeTextColors) {
-          item.setBadgeTextAttributes([.foregroundColor: btc], for: .normal)
-          item.setBadgeTextAttributes([.foregroundColor: btc], for: .selected)
-        }
-      }
+      let badge = i < badges.count ? badges[i] : ""
+      Self.applyBadge(
+        to: item,
+        index: i,
+        badge: badge,
+        badgeColors: badgeColors,
+        badgeTextColors: badgeTextColors,
+        badgeDotSizes: badgeDotSizes,
+        badgeFontSizes: badgeFontSizes
+      )
     }
 
     if let bar = self.tabBar, let items = bar.items {

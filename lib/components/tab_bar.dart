@@ -21,6 +21,8 @@ class CNTabBarItem {
     this.badge,
     this.badgeColor,
     this.badgeTextColor,
+    this.badgeDotSize,
+    this.badgeFontSize,
     this.customIcon,
     this.activeCustomIcon,
     this.imageAsset,
@@ -55,6 +57,18 @@ class CNTabBarItem {
   /// Text color of the badge label.
   /// Defaults to white when null.
   final Color? badgeTextColor;
+
+  /// Custom size (in logical points) for the dot badge when [badge] is `''`.
+  ///
+  /// On iOS this renders a dot-style badge with the requested size.
+  /// If null, the system default dot size is used.
+  final double? badgeDotSize;
+
+  /// Custom font size (in logical points) for text badges.
+  ///
+  /// Applies when [badge] contains non-empty text (e.g. `'3'`, `'New'`).
+  /// If null, the system default badge text size is used.
+  final double? badgeFontSize;
 
   /// Optional custom icon for unselected state.
   /// Use icons from CupertinoIcons, Icons, or any custom IconData.
@@ -294,6 +308,27 @@ class _CNTabBarState extends State<CNTabBar> {
     super.dispose();
   }
 
+  @override
+  void reassemble() {
+    super.reassemble();
+    // Hot reload keeps State but may skip didUpdateWidget/didChangeDependencies
+    // paths that normally trigger native sync. Invalidate caches and force a
+    // post-frame sync so updated Dart params (badge colors, label style, etc.)
+    // are pushed to the native tab bar without requiring hot restart.
+    _lastItemsFingerprint = null;
+    _lastBadgesFingerprint = null;
+    _lastSplit = null;
+    _lastRightCount = null;
+    _lastSplitSpacing = null;
+    _lastIsDark = null;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _syncPropsToNativeIfNeeded();
+      _syncBrightnessIfNeeded();
+    });
+  }
+
   void _onSearchControllerChanged() {
     final controller = widget.searchController;
     if (controller == null) return;
@@ -323,18 +358,6 @@ class _CNTabBarState extends State<CNTabBar> {
 
   @override
   Widget build(BuildContext context) {
-    // Debug: Print badgeColor and badgeTextColor ARGB values for each item
-    assert(() {
-      for (int i = 0; i < widget.items.length; i++) {
-        final item = widget.items[i];
-        final badgeColor = resolveColorToArgb(item.badgeColor, context);
-        final badgeTextColor = resolveColorToArgb(item.badgeTextColor, context);
-        debugPrint(
-          '[cupertino_native_better] Tab $i label="${item.label}" badgeColor=${badgeColor?.toRadixString(16)} badgeTextColor=${badgeTextColor?.toRadixString(16)} badge="${item.badge}"',
-        );
-      }
-      return true;
-    }());
     // Check if we should use native platform view
     final isIOSOrMacOS = defaultTargetPlatform == TargetPlatform.iOS || defaultTargetPlatform == TargetPlatform.macOS;
     final shouldUseNative = isIOSOrMacOS && PlatformVersion.shouldUseNativeGlass;
@@ -423,6 +446,8 @@ class _CNTabBarState extends State<CNTabBar> {
     final badges = widget.items.map((e) => _encodeBadge(e.badge)).toList();
     final badgeColors = widget.items.map((e) => resolveColorToArgb(e.badgeColor, context)).toList();
     final badgeTextColors = widget.items.map((e) => resolveColorToArgb(e.badgeTextColor, context)).toList();
+    final badgeDotSizes = widget.items.map((e) => e.badgeDotSize).toList();
+    final badgeFontSizes = widget.items.map((e) => e.badgeFontSize).toList();
 
     // Extract imageAsset data and resolve asset paths based on device pixel ratio
     final imageAssetPaths = await Future.wait(
@@ -474,6 +499,8 @@ class _CNTabBarState extends State<CNTabBar> {
       'badges': badges,
       'badgeColors': badgeColors,
       'badgeTextColors': badgeTextColors,
+      'badgeDotSizes': badgeDotSizes,
+      'badgeFontSizes': badgeFontSizes,
       'customIconBytes': customIconBytes,
       'activeCustomIconBytes': activeCustomIconBytes,
       'imageAssetPaths': imageAssetPaths,
@@ -692,6 +719,8 @@ class _CNTabBarState extends State<CNTabBar> {
       final badges = widget.items.map((e) => _encodeBadge(e.badge)).toList();
       final badgeColors = widget.items.map((e) => resolveColorToArgb(e.badgeColor, context)).toList();
       final badgeTextColors = widget.items.map((e) => resolveColorToArgb(e.badgeTextColor, context)).toList();
+      final badgeDotSizes = widget.items.map((e) => e.badgeDotSize).toList();
+      final badgeFontSizes = widget.items.map((e) => e.badgeFontSize).toList();
 
       // Compute comprehensive fingerprint covering ALL item properties
       final currentFingerprint = _itemsFingerprint();
@@ -706,7 +735,13 @@ class _CNTabBarState extends State<CNTabBar> {
 
       if (onlyBadgesChanged) {
         // Only badge values/colors changed — use lightweight update
-        await ch.invokeMethod('setBadges', {'badges': badges, 'badgeColors': badgeColors, 'badgeTextColors': badgeTextColors});
+        await ch.invokeMethod('setBadges', {
+          'badges': badges,
+          'badgeColors': badgeColors,
+          'badgeTextColors': badgeTextColors,
+          'badgeDotSizes': badgeDotSizes,
+          'badgeFontSizes': badgeFontSizes,
+        });
         _lastBadgesFingerprint = currentBadgesFingerprint;
         _lastItemsFingerprint = currentFingerprint;
         return;
@@ -747,6 +782,8 @@ class _CNTabBarState extends State<CNTabBar> {
           'badges': badges,
           'badgeColors': badgeColors,
           'badgeTextColors': badgeTextColors,
+          'badgeDotSizes': badgeDotSizes,
+          'badgeFontSizes': badgeFontSizes,
           'customIconBytes': customIconBytes,
           'activeCustomIconBytes': activeCustomIconBytes,
           'imageAssetPaths': imageAssetPaths,
@@ -831,6 +868,8 @@ class _CNTabBarState extends State<CNTabBar> {
             e.activeImageAsset?.size.toString() ?? '',
             e.customIcon?.hashCode.toString() ?? '',
             e.activeCustomIcon?.hashCode.toString() ?? '',
+            e.badgeDotSize?.toString() ?? '',
+            e.badgeFontSize?.toString() ?? '',
             e.padding?.toString() ?? '',
           ].join('\x00');
         })
@@ -845,6 +884,8 @@ class _CNTabBarState extends State<CNTabBar> {
             _encodeBadge(e.badge),
             resolveColorToArgb(e.badgeColor, context)?.toString() ?? '',
             resolveColorToArgb(e.badgeTextColor, context)?.toString() ?? '',
+            e.badgeDotSize?.toString() ?? '',
+            e.badgeFontSize?.toString() ?? '',
           ].join('\x00'),
         )
         .join('\x01');
@@ -857,11 +898,13 @@ class _CNTabBarState extends State<CNTabBar> {
         .split('\x01')
         .map((itemStr) {
           final parts = itemStr.split('\x00');
-          if (parts.length >= 16) {
-            // Badges are encoded at indices 4, 7, 8 in _itemsFingerprint
+          if (parts.length >= 18) {
+            // Badge-related fields are encoded at indices 4, 7, 8, 16, 17
             parts[4] = '';
             parts[7] = '';
             parts[8] = '';
+            parts[16] = '';
+            parts[17] = '';
           }
           return parts.join('\x00');
         })
