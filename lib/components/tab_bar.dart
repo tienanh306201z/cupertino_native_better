@@ -106,7 +106,6 @@ class CNTabBar extends StatefulWidget {
     required this.items,
     required this.currentIndex,
     required this.onTap,
-    this.backgroundColor,
     this.height,
     this.split = false,
     this.rightCount = 1,
@@ -136,9 +135,6 @@ class CNTabBar extends StatefulWidget {
 
   /// Called when the user selects a new item.
   final ValueChanged<int> onTap;
-
-  /// Background color for the bar.
-  final Color? backgroundColor;
 
   /// Fixed height; if null uses intrinsic height reported by native view.
   final double? height;
@@ -220,7 +216,6 @@ class CNTabBar extends StatefulWidget {
 class _CNTabBarState extends State<CNTabBar> {
   MethodChannel? _channel;
   int? _lastIndex;
-  int? _lastBg;
   bool? _lastIsDark;
   double? _intrinsicHeight;
   double? _intrinsicWidth;
@@ -390,10 +385,6 @@ class _CNTabBarState extends State<CNTabBar> {
     final capturedDevicePixelRatio = MediaQuery.of(context).devicePixelRatio;
     final capturedIsDark = _isDark;
     final capturedStyle = encodeStyle(context, tint: _themeTint);
-    final capturedBackgroundColor = resolveColorToArgb(
-      widget.backgroundColor,
-      context,
-    );
     // Capture search style params before async operations
     final capturedSearchStyle = _hasSearch
         ? _buildSearchStyleParams(context)
@@ -502,11 +493,7 @@ class _CNTabBarState extends State<CNTabBar> {
       'rightCount': widget.rightCount,
       'splitSpacing': widget.splitSpacing,
       'iconAboveLabel': widget.iconAboveLabel,
-      'style': capturedStyle
-        ..addAll({
-          if (capturedBackgroundColor != null)
-            'backgroundColor': capturedBackgroundColor,
-        }),
+      'style': capturedStyle,
       // Label style configuration
       if (capturedLabelStyle != null) 'labelStyle': capturedLabelStyle,
       // Search configuration (iOS 26+)
@@ -649,7 +636,6 @@ class _CNTabBarState extends State<CNTabBar> {
     _channel = ch;
     ch.setMethodCallHandler(_onMethodCall);
     _lastIndex = widget.currentIndex;
-    _lastBg = resolveColorToArgb(widget.backgroundColor, context);
     _lastIsDark = _isDark;
     _requestIntrinsicSize();
     _cacheItems();
@@ -721,7 +707,6 @@ class _CNTabBarState extends State<CNTabBar> {
     if (ch == null) return;
     // Capture theme-dependent values before awaiting
     final idx = widget.currentIndex;
-    final bg = resolveColorToArgb(widget.backgroundColor, context);
     final iconScale = MediaQuery.of(context).devicePixelRatio;
     final labelStyleParams = _buildLabelStyleParams(context);
 
@@ -732,10 +717,6 @@ class _CNTabBarState extends State<CNTabBar> {
       }
 
       final style = <String, dynamic>{};
-      if (_lastBg != bg && bg != null) {
-        style['backgroundColor'] = bg;
-        _lastBg = bg;
-      }
       if (labelStyleParams != null) {
         style['labelStyle'] = labelStyleParams;
       }
@@ -955,7 +936,6 @@ class _CNTabBarState extends State<CNTabBar> {
           ],
           currentIndex: widget.currentIndex,
           onTap: widget.onTap,
-          backgroundColor: widget.backgroundColor,
           inactiveColor: labelStyle?.color ?? CupertinoColors.inactiveGray,
           activeColor: labelStyle?.activeColor ?? tintColor,
         ),

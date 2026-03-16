@@ -34,7 +34,6 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
   private var iconAboveLabel: Bool = true
   private var currentColors: [NSNumber?] = []
   private var currentActiveColors: [NSNumber?] = []
-  private var currentBgColor: UIColor? = nil
 
   init(frame: CGRect, viewId: Int64, args: Any?, messenger: FlutterBinaryMessenger) {
     self.channel = FlutterMethodChannel(name: "CupertinoNativeTabBar_\(viewId)", binaryMessenger: messenger)
@@ -96,7 +95,6 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
       if let v = dict["isDark"] as? NSNumber { isDark = v.boolValue }
       if let style = dict["style"] as? [String: Any] {
         if let n = style["tint"] as? NSNumber { tint = Self.colorFromARGB(n.intValue) }
-        if let n = style["backgroundColor"] as? NSNumber { bg = Self.colorFromARGB(n.intValue) }
       }
       if let s = dict["split"] as? NSNumber { split = s.boolValue }
       if let rc = dict["rightCount"] as? NSNumber { rightCount = rc.intValue }
@@ -135,13 +133,7 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
     let appearance: UITabBarAppearance? = {
     if #available(iOS 13.0, *) {
       let ap = UITabBarAppearance()
-      if let bg = bg {
-        // If backgroundColor is explicitly set, use default background to allow translucent tinting
-        ap.configureWithDefaultBackground()
-        ap.backgroundColor = bg
-      } else {
-        ap.configureWithTransparentBackground()
-      }
+      ap.configureWithTransparentBackground()
       ap.shadowColor = .clear
       ap.shadowImage = UIImage()
       Self.applyLabelStyle(to: ap, labelStyle: self.currentLabelStyle, tint: tint)
@@ -235,9 +227,6 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
       }
       left.layer.shadowOpacity = 0; right.layer.shadowOpacity = 0
       left.delegate = self; right.delegate = self
-      if appearance == nil {
-        if let bg = bg { left.barTintColor = bg; right.barTintColor = bg }
-      }
       if #available(iOS 10.0, *), let tint = tint { left.tintColor = tint; right.tintColor = tint }
       if let ap = appearance { if #available(iOS 13.0, *) { left.standardAppearance = ap; right.standardAppearance = ap; if #available(iOS 15.0, *) { left.scrollEdgeAppearance = ap; right.scrollEdgeAppearance = ap } } }
       if self.iconAboveLabel { Self.forceStackedLayout(on: left); Self.forceStackedLayout(on: right) } else { Self.forceInlineLayout(on: left); Self.forceInlineLayout(on: right) }
@@ -347,9 +336,6 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
         bar.clipsToBounds = true // Prevent shadow leakage on older iOS
       }
       bar.layer.shadowOpacity = 0
-      if appearance == nil {
-        if let bg = bg { bar.barTintColor = bg }
-      }
       if #available(iOS 10.0, *), let tint = tint { bar.tintColor = tint }
       if let ap = appearance { if #available(iOS 13.0, *) { bar.standardAppearance = ap; if #available(iOS 15.0, *) { bar.scrollEdgeAppearance = ap } } }
       if self.iconAboveLabel { Self.forceStackedLayout(on: bar) } else { Self.forceInlineLayout(on: bar) }
@@ -403,7 +389,6 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
     self.currentIconSizes = sizes.compactMap { $0 }.map { CGFloat(truncating: $0) }
     self.currentColors = colors
     self.currentActiveColors = activeColors
-    self.currentBgColor = bg
 channel.setMethodCallHandler { [weak self] call, result in
       guard let self = self else { result(nil); return }
       switch call.method {
@@ -586,12 +571,7 @@ channel.setMethodCallHandler { [weak self] call, result in
           let appearance: UITabBarAppearance? = {
             if #available(iOS 13.0, *) {
               let ap = UITabBarAppearance()
-              if let bg = self.currentBgColor {
-                ap.configureWithDefaultBackground()
-                ap.backgroundColor = bg
-              } else {
-                ap.configureWithTransparentBackground()
-              }
+              ap.configureWithTransparentBackground()
               ap.shadowColor = .clear
               ap.shadowImage = UIImage()
               Self.applyLabelStyle(to: ap, labelStyle: labelStyle, tint: nil)
@@ -844,37 +824,13 @@ channel.setMethodCallHandler { [weak self] call, result in
             if let left = self.tabBarLeft { left.tintColor = c }
             if let right = self.tabBarRight { right.tintColor = c }
           }
-          if let n = args["backgroundColor"] as? NSNumber {
-            let c = Self.colorFromARGB(n.intValue)
-            self.currentBgColor = c
-            if #available(iOS 13.0, *) {
-              let allBars: [UITabBar] = [self.tabBar, self.tabBarLeft, self.tabBarRight].compactMap { $0 }
-              for bar in allBars {
-                if let ap = bar.standardAppearance.copy() as? UITabBarAppearance {
-                  ap.configureWithDefaultBackground() // <-- THIS is required for background color to apply
-                  ap.backgroundColor = c
-                  bar.standardAppearance = ap
-                  if #available(iOS 15.0, *) { bar.scrollEdgeAppearance = ap }
-                }
-              }
-            } else {
-              if let bar = self.tabBar { bar.barTintColor = c }
-              if let left = self.tabBarLeft { left.barTintColor = c }
-              if let right = self.tabBarRight { right.barTintColor = c }
-            }
-          }
           if let ls = args["labelStyle"] as? [String: Any] {
             self.currentLabelStyle = ls
             if #available(iOS 13.0, *) {
               let allBars: [UITabBar] = [self.tabBar, self.tabBarLeft, self.tabBarRight].compactMap { $0 }
               for bar in allBars {
                 let ap = UITabBarAppearance()
-                if let bg = self.currentBgColor {
-                  ap.configureWithDefaultBackground()
-                  ap.backgroundColor = bg
-                } else {
-                  ap.configureWithTransparentBackground()
-                }
+                ap.configureWithTransparentBackground()
                 ap.shadowColor = .clear
                 ap.shadowImage = UIImage()
                 Self.applyLabelStyle(to: ap, labelStyle: ls, tint: tintColor ?? bar.tintColor)
