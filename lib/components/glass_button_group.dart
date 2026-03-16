@@ -110,6 +110,34 @@ class _CNGlassButtonGroupState extends State<CNGlassButtonGroup> {
   /// Whether we're using widget mode (backward compatibility).
   bool get _usingWidgets => widget._buttonWidgets != null;
 
+  Future<List<Map<String, dynamic>>>? _creationParamsFuture;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_creationParamsFuture == null) {
+      final isIOSOrMacOS =
+          defaultTargetPlatform == TargetPlatform.iOS ||
+          defaultTargetPlatform == TargetPlatform.macOS;
+      final shouldUseNative =
+          isIOSOrMacOS && PlatformVersion.shouldUseNativeGlass;
+
+      if (shouldUseNative) {
+        _creationParamsFuture = _usingWidgets
+            ? Future.wait(
+                widget._buttonWidgets!.map(
+                  (button) => _buttonWidgetToMapAsync(button, context),
+                ),
+              )
+            : Future.wait(
+                widget.buttons.map(
+                  (button) => _buttonDataToMapAsync(button, context),
+                ),
+              );
+      }
+    }
+  }
+
   @override
   void didUpdateWidget(covariant CNGlassButtonGroup oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -134,18 +162,12 @@ class _CNGlassButtonGroupState extends State<CNGlassButtonGroup> {
   Widget _buildNativeGroup(BuildContext context) {
     const viewType = 'CupertinoNativeGlassButtonGroup';
 
+    if (_creationParamsFuture == null) {
+      return const SizedBox.shrink();
+    }
+
     return FutureBuilder<List<Map<String, dynamic>>>(
-      future: _usingWidgets
-          ? Future.wait(
-              widget._buttonWidgets!.map(
-                (button) => _buttonWidgetToMapAsync(button, context),
-              ),
-            )
-          : Future.wait(
-              widget.buttons.map(
-                (button) => _buttonDataToMapAsync(button, context),
-              ),
-            ),
+      future: _creationParamsFuture,
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
           return const SizedBox.shrink();

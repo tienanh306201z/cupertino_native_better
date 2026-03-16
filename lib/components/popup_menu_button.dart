@@ -173,6 +173,8 @@ class _CNPopupMenuButtonState extends State<CNPopupMenuButton> {
   Offset? _downPosition;
   bool _pressed = false;
 
+  Future<Map<String, dynamic>?>? _creationParamsFuture;
+
   bool get _isDark => ThemeHelper.isDark(context);
   Color? get _effectiveTint =>
       widget.tint ?? ThemeHelper.getPrimaryColor(context);
@@ -187,6 +189,14 @@ class _CNPopupMenuButtonState extends State<CNPopupMenuButton> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     _syncBrightnessIfNeeded();
+    if (_creationParamsFuture == null) {
+      final isIOSOrMacOS =
+          defaultTargetPlatform == TargetPlatform.iOS ||
+          defaultTargetPlatform == TargetPlatform.macOS;
+      if (isIOSOrMacOS && PlatformVersion.shouldUseNativeGlass) {
+        _creationParamsFuture = _buildCreationParams(context);
+      }
+    }
   }
 
   @override
@@ -205,73 +215,23 @@ class _CNPopupMenuButtonState extends State<CNPopupMenuButton> {
         isIOSOrMacOS && PlatformVersion.shouldUseNativeGlass;
 
     // Fallback to Flutter widgets for non-iOS/macOS or iOS/macOS < 26
-    if (!shouldUseNative) {
+    if (!shouldUseNative || _creationParamsFuture == null) {
       // For both non-iOS/macOS and iOS/macOS < 26, use CupertinoActionSheet
       return _buildCupertinoFallback(context);
     }
 
-    // Priority: imageAsset > customIcon > icon
-
-    // Check if we need to render custom icons or image assets
-    final hasCustomButtonIcon = widget.buttonCustomIcon != null;
-    final hasButtonImageAsset = widget.buttonImageAsset != null;
-    final hasCustomMenuIcons = widget.items.any(
-      (e) => e is CNPopupMenuItem && e.customIcon != null,
-    );
-    final hasMenuImageAssets = widget.items.any(
-      (e) => e is CNPopupMenuItem && e.imageAsset != null,
-    );
-
-    if (hasCustomButtonIcon ||
-        hasCustomMenuIcons ||
-        hasButtonImageAsset ||
-        hasMenuImageAssets) {
-      // Create a key that changes when button or menu icons change
-      final buttonIconKey =
-          '${widget.buttonImageAsset?.assetPath}_${widget.buttonImageAsset?.imageData?.length ?? 0}_${widget.buttonCustomIcon?.hashCode ?? 0}';
-      final menuIconsKey = widget.items
-          .map((e) {
-            if (e is CNPopupMenuItem) {
-              return '${e.imageAsset?.assetPath}_${e.imageAsset?.imageData?.length ?? 0}_${e.customIcon?.hashCode ?? 0}';
-            }
-            return '';
-          })
-          .join('|');
-      return FutureBuilder<Map<String, dynamic>>(
-        key: ValueKey('popupMenu_icons_$buttonIconKey|$menuIconsKey'),
-        future: _renderCustomIcons(context),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData) {
-            return SizedBox(height: widget.height, width: widget.width);
-          }
-          return FutureBuilder<Widget>(
-            future: _buildNativePopupMenu(
-              context,
-              customIconData: snapshot.data,
-            ),
-            builder: (context, widgetSnapshot) {
-              if (!widgetSnapshot.hasData) {
-                return SizedBox(height: widget.height, width: widget.width);
-              }
-              return widgetSnapshot.data!;
-            },
-          );
-        },
-      );
-    }
-
-    return FutureBuilder<Widget>(
-      future: _buildNativePopupMenu(context, customIconData: null),
+    return FutureBuilder<Map<String, dynamic>?>(
+      future: _creationParamsFuture,
       builder: (context, snapshot) {
-        if (!snapshot.hasData) {
+        if (!snapshot.hasData || snapshot.data == null) {
           return SizedBox(height: widget.height, width: widget.width);
         }
-        return snapshot.data!;
+        return _buildNativePopupMenuPlatformView(snapshot.data!);
       },
     );
   }
 
-  Future<Map<String, dynamic>> _renderCustomIcons(BuildContext context) async {
+  Future<Map<String, dynamic>> _renderCustomIcons() async {
     Uint8List? buttonIconBytes;
     final menuIconBytes = <Uint8List?>[];
 
@@ -309,12 +269,7 @@ class _CNPopupMenuButtonState extends State<CNPopupMenuButton> {
     return {'buttonIconBytes': buttonIconBytes, 'menuIconBytes': menuIconBytes};
   }
 
-  Future<Widget> _buildNativePopupMenu(
-    BuildContext context, {
-    Map<String, dynamic>? customIconData,
-  }) async {
-    const viewType = 'CupertinoNativePopupMenuButton';
-
+  Future<Map<String, dynamic>?> _buildCreationParams(BuildContext context) async {
     // Capture all context-derived values before any async operations
     final capturedIsDark = _isDark;
     final capturedStyle = encodeStyle(context, tint: _effectiveTint);
@@ -352,6 +307,9 @@ class _CNPopupMenuButtonState extends State<CNPopupMenuButton> {
       }
     }
 
+    final customIconData = await _renderCustomIcons();
+    if (!mounted) return null;
+
     // Resolve button image asset path if present
     String? resolvedButtonAssetPath;
     if (widget.buttonImageAsset != null &&
@@ -360,7 +318,7 @@ class _CNPopupMenuButtonState extends State<CNPopupMenuButton> {
         widget.buttonImageAsset!.assetPath,
       );
     }
-    if (!mounted) return const SizedBox();
+    if (!mounted) return null;
 
     // Resolve menu item image assets concurrently
     final resolvedMenuPaths = await Future.wait(
@@ -371,11 +329,11 @@ class _CNPopupMenuButtonState extends State<CNPopupMenuButton> {
         return null;
       }),
     );
-    if (!mounted) return const SizedBox();
+    if (!mounted) return null;
 
-    final buttonIconBytes = customIconData?['buttonIconBytes'] as Uint8List?;
+    final buttonIconBytes = customIconData['buttonIconBytes'] as Uint8List?;
     final menuIconBytes =
-        customIconData?['menuIconBytes'] as List<Uint8List?>? ?? [];
+        customIconData['menuIconBytes'] as List<Uint8List?>? ?? [];
 
     // Flatten entries into parallel arrays for the platform view.
     final labels = <String>[];
@@ -499,6 +457,12 @@ class _CNPopupMenuButtonState extends State<CNPopupMenuButton> {
       'preserveTopToBottomOrder': widget.preserveTopToBottomOrder,
     };
 
+    return creationParams;
+  }
+
+  Widget _buildNativePopupMenuPlatformView(Map<String, dynamic> creationParams) {
+    const viewType = 'CupertinoNativePopupMenuButton';
+
     // Create a comprehensive key that includes all parameters affecting platform view creation
     final buttonIconKey =
         '${widget.buttonLabel}_${widget.buttonIcon?.name}_${widget.buttonImageAsset?.assetPath}_${widget.buttonImageAsset?.imageData?.length ?? 0}_${widget.buttonCustomIcon?.hashCode ?? 0}';
@@ -520,7 +484,6 @@ class _CNPopupMenuButtonState extends State<CNPopupMenuButton> {
       '${widget.tint?.toARGB32()}_'
       '$_isDark',
     );
-
     final platformView = defaultTargetPlatform == TargetPlatform.iOS
         ? UiKitView(
             key: viewKey,
@@ -542,7 +505,6 @@ class _CNPopupMenuButtonState extends State<CNPopupMenuButton> {
               Factory<TapGestureRecognizer>(() => TapGestureRecognizer()),
             },
           );
-
     return LayoutBuilder(
       builder: (context, constraints) {
         final hasBoundedWidth = constraints.hasBoundedWidth;

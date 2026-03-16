@@ -70,7 +70,16 @@ class _CNIconState extends State<CNIcon> {
   bool? _lastGradient;
   // No intrinsic sizing storage; icons use explicit size.
 
+  Future<String>? _assetPathFuture;
+  Future<Uint8List?>? _customIconFuture;
+
   bool get _isDark => ThemeHelper.isDark(context);
+
+  @override
+  void initState() {
+    super.initState();
+    _initFutures();
+  }
 
   @override
   void didChangeDependencies() {
@@ -81,7 +90,23 @@ class _CNIconState extends State<CNIcon> {
   @override
   void didUpdateWidget(covariant CNIcon oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.imageAsset?.assetPath != widget.imageAsset?.assetPath ||
+        oldWidget.customIcon != widget.customIcon ||
+        oldWidget.size != widget.size ||
+        oldWidget.symbol?.size != widget.symbol?.size) {
+      _initFutures();
+    }
     _syncPropsToNativeIfNeeded();
+  }
+
+  void _initFutures() {
+    if (widget.imageAsset != null) {
+      _assetPathFuture = resolveAssetPathForPixelRatio(widget.imageAsset!.assetPath);
+    }
+    if (widget.customIcon != null) {
+      final iconSize = widget.size ?? widget.symbol?.size ?? 24.0;
+      _customIconFuture = iconDataToImageBytes(widget.customIcon!, size: iconSize);
+    }
   }
 
   @override
@@ -107,7 +132,7 @@ class _CNIconState extends State<CNIcon> {
     // Handle image asset (highest priority)
     if (widget.imageAsset != null) {
       return FutureBuilder<String>(
-        future: resolveAssetPathForPixelRatio(widget.imageAsset!.assetPath),
+        future: _assetPathFuture,
         builder: (context, snapshot) {
           if (!snapshot.hasData) {
             final defaultSize =
@@ -136,7 +161,7 @@ class _CNIconState extends State<CNIcon> {
     if (widget.customIcon != null) {
       final iconSize = widget.size ?? widget.symbol?.size ?? 24.0;
       return FutureBuilder<Uint8List?>(
-        future: iconDataToImageBytes(widget.customIcon!, size: iconSize),
+        future: _customIconFuture,
         builder: (context, snapshot) {
           if (!snapshot.hasData) {
             return SizedBox(width: iconSize, height: widget.height ?? iconSize);

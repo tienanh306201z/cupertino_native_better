@@ -233,10 +233,19 @@ class _CNButtonState extends State<CNButton> {
   Offset? _downPosition;
   bool _pressed = false;
 
+  Future<String>? _assetPathFuture;
+  Future<Uint8List?>? _customIconFuture;
+
   bool get _isDark => ThemeHelper.isDark(context);
 
   Color? get _effectiveTint =>
       widget.tint ?? ThemeHelper.getPrimaryColor(context);
+
+  @override
+  void initState() {
+    super.initState();
+    _initFutures();
+  }
 
   @override
   void dispose() {
@@ -247,7 +256,22 @@ class _CNButtonState extends State<CNButton> {
   @override
   void didUpdateWidget(covariant CNButton oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.imageAsset?.assetPath != widget.imageAsset?.assetPath ||
+        oldWidget.customIcon != widget.customIcon ||
+        oldWidget.config.customIconSize != widget.config.customIconSize) {
+      _initFutures();
+    }
     _syncPropsToNativeIfNeeded();
+  }
+
+  void _initFutures() {
+    if (widget.imageAsset != null) {
+      _assetPathFuture = resolveAssetPathForPixelRatio(widget.imageAsset!.assetPath);
+    }
+    if (widget.customIcon != null) {
+      final customIconSize = widget.config.customIconSize ?? 20.0;
+      _customIconFuture = iconDataToImageBytes(widget.customIcon!, size: customIconSize);
+    }
   }
 
   @override
@@ -282,7 +306,7 @@ class _CNButtonState extends State<CNButton> {
     // Handle image asset (highest priority)
     if (widget.imageAsset != null) {
       return FutureBuilder<String>(
-        future: resolveAssetPathForPixelRatio(widget.imageAsset!.assetPath),
+        future: _assetPathFuture,
         builder: (context, snapshot) {
           if (!snapshot.hasData) {
             final defaultHeight = widget.config.minHeight ?? 44.0;
@@ -308,9 +332,8 @@ class _CNButtonState extends State<CNButton> {
 
     // Handle custom icon (medium priority)
     if (widget.customIcon != null) {
-      final customIconSize = widget.config.customIconSize ?? 20.0;
       return FutureBuilder<Uint8List?>(
-        future: iconDataToImageBytes(widget.customIcon!, size: customIconSize),
+        future: _customIconFuture,
         builder: (context, snapshot) {
           if (!snapshot.hasData) {
             final defaultHeight = widget.config.minHeight ?? 44.0;
