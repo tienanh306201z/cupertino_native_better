@@ -136,8 +136,8 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
     if #available(iOS 13.0, *) {
       let ap = UITabBarAppearance()
       if let bg = bg {
-        // If backgroundColor is explicitly set, use opaque background to render it properly
-        ap.configureWithOpaqueBackground()
+        // If backgroundColor is explicitly set, use default background to allow translucent tinting
+        ap.configureWithDefaultBackground()
         ap.backgroundColor = bg
       } else {
         ap.configureWithTransparentBackground()
@@ -235,7 +235,9 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
       }
       left.layer.shadowOpacity = 0; right.layer.shadowOpacity = 0
       left.delegate = self; right.delegate = self
-      if let bg = bg { left.barTintColor = bg; right.barTintColor = bg }
+      if appearance == nil {
+        if let bg = bg { left.barTintColor = bg; right.barTintColor = bg }
+      }
       if #available(iOS 10.0, *), let tint = tint { left.tintColor = tint; right.tintColor = tint }
       if let ap = appearance { if #available(iOS 13.0, *) { left.standardAppearance = ap; right.standardAppearance = ap; if #available(iOS 15.0, *) { left.scrollEdgeAppearance = ap; right.scrollEdgeAppearance = ap } } }
       if self.iconAboveLabel { Self.forceStackedLayout(on: left); Self.forceStackedLayout(on: right) } else { Self.forceInlineLayout(on: left); Self.forceInlineLayout(on: right) }
@@ -345,7 +347,9 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
         bar.clipsToBounds = true // Prevent shadow leakage on older iOS
       }
       bar.layer.shadowOpacity = 0
-      if let bg = bg { bar.barTintColor = bg }
+      if appearance == nil {
+        if let bg = bg { bar.barTintColor = bg }
+      }
       if #available(iOS 10.0, *), let tint = tint { bar.tintColor = tint }
       if let ap = appearance { if #available(iOS 13.0, *) { bar.standardAppearance = ap; if #available(iOS 15.0, *) { bar.scrollEdgeAppearance = ap } } }
       if self.iconAboveLabel { Self.forceStackedLayout(on: bar) } else { Self.forceInlineLayout(on: bar) }
@@ -583,7 +587,7 @@ channel.setMethodCallHandler { [weak self] call, result in
             if #available(iOS 13.0, *) {
               let ap = UITabBarAppearance()
               if let bg = self.currentBgColor {
-                ap.configureWithOpaqueBackground()
+                ap.configureWithDefaultBackground()
                 ap.backgroundColor = bg
               } else {
                 ap.configureWithTransparentBackground()
@@ -847,6 +851,7 @@ channel.setMethodCallHandler { [weak self] call, result in
               let allBars: [UITabBar] = [self.tabBar, self.tabBarLeft, self.tabBarRight].compactMap { $0 }
               for bar in allBars {
                 if let ap = bar.standardAppearance.copy() as? UITabBarAppearance {
+                  ap.configureWithDefaultBackground() // <-- THIS is required for background color to apply
                   ap.backgroundColor = c
                   bar.standardAppearance = ap
                   if #available(iOS 15.0, *) { bar.scrollEdgeAppearance = ap }
@@ -865,7 +870,7 @@ channel.setMethodCallHandler { [weak self] call, result in
               for bar in allBars {
                 let ap = UITabBarAppearance()
                 if let bg = self.currentBgColor {
-                  ap.configureWithOpaqueBackground()
+                  ap.configureWithDefaultBackground()
                   ap.backgroundColor = bg
                 } else {
                   ap.configureWithTransparentBackground()
