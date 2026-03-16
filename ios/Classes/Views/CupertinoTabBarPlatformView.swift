@@ -933,6 +933,10 @@ channel.setMethodCallHandler { [weak self] call, result in
           self.currentBadgeColors = badgeColors
           let badgeTextColors = args["badgeTextColors"] != nil ? Self.extractNullableNumbers(args["badgeTextColors"]) : self.currentBadgeTextColors
           self.currentBadgeTextColors = badgeTextColors
+          let badgeDotSizes = args["badgeDotSizes"] != nil ? Self.extractNullableNumbers(args["badgeDotSizes"]) : self.currentBadgeDotSizes
+          self.currentBadgeDotSizes = badgeDotSizes
+          let badgeFontSizes = args["badgeFontSizes"] != nil ? Self.extractNullableNumbers(args["badgeFontSizes"]) : self.currentBadgeFontSizes
+          self.currentBadgeFontSizes = badgeFontSizes
           if #available(iOS 13.0, *) {
             let allBars: [UITabBar] = [self.tabBar, self.tabBarLeft, self.tabBarRight].compactMap { $0 }
             for bar in allBars {
