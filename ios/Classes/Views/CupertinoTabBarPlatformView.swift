@@ -141,6 +141,9 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
       ap.shadowColor = .clear
       ap.shadowImage = UIImage()
       Self.applyLabelStyle(to: ap, labelStyle: self.currentLabelStyle, tint: tint)
+      let badgeBackground = Self.firstNonNilColor(colors: self.currentBadgeColors)
+      let badgeText = Self.firstNonNilColor(colors: self.currentBadgeTextColors)
+      Self.applyBadgeStyle(to: ap, badgeBackground: badgeBackground, badgeText: badgeText)
       return ap
     }
     return nil
@@ -899,6 +902,9 @@ channel.setMethodCallHandler { [weak self] call, result in
                 ap.shadowColor = .clear
                 ap.shadowImage = UIImage()
                 Self.applyLabelStyle(to: ap, labelStyle: ls, tint: tintColor ?? bar.tintColor)
+                let badgeBackground = Self.firstNonNilColor(colors: self.currentBadgeColors)
+                let badgeText = Self.firstNonNilColor(colors: self.currentBadgeTextColors)
+                Self.applyBadgeStyle(to: ap, badgeBackground: badgeBackground, badgeText: badgeText)
                 bar.standardAppearance = ap
                 if #available(iOS 15.0, *) { bar.scrollEdgeAppearance = ap }
               }
@@ -922,6 +928,21 @@ channel.setMethodCallHandler { [weak self] call, result in
           self.currentBadgeColors = badgeColors
           let badgeTextColors = args["badgeTextColors"] != nil ? Self.extractNullableNumbers(args["badgeTextColors"]) : self.currentBadgeTextColors
           self.currentBadgeTextColors = badgeTextColors
+          if #available(iOS 13.0, *) {
+            let allBars: [UITabBar] = [self.tabBar, self.tabBarLeft, self.tabBarRight].compactMap { $0 }
+            for bar in allBars {
+              let ap = UITabBarAppearance()
+              ap.configureWithTransparentBackground()
+              ap.shadowColor = .clear
+              ap.shadowImage = UIImage()
+              Self.applyLabelStyle(to: ap, labelStyle: self.currentLabelStyle, tint: bar.tintColor)
+              let badgeBackground = Self.firstNonNilColor(colors: badgeColors)
+              let badgeText = Self.firstNonNilColor(colors: badgeTextColors)
+              Self.applyBadgeStyle(to: ap, badgeBackground: badgeBackground, badgeText: badgeText)
+              bar.standardAppearance = ap
+              if #available(iOS 15.0, *) { bar.scrollEdgeAppearance = ap }
+            }
+          }
           func applyBadge(to item: UITabBarItem, index i: Int) {
             if i < badges.count && !badges[i].isEmpty {
               item.badgeValue = badges[i] == "\u{200B}" ? "" : badges[i]
@@ -1111,6 +1132,40 @@ channel.setMethodCallHandler { [weak self] call, result in
     let right = CGFloat(p[3])
     item.imageInsets = UIEdgeInsets(top: top, left: left, bottom: -bottom, right: -right)
     item.titlePositionAdjustment = UIOffset(horizontal: (left - right) / 2, vertical: bottom)
+  }
+
+  private static func firstNonNilColor(colors: [NSNumber?]) -> UIColor? {
+    for value in colors {
+      if let value = value { return colorFromARGB(value.intValue) }
+    }
+    return nil
+  }
+
+  @available(iOS 13.0, *)
+  private static func applyBadgeStyle(
+    to appearance: UITabBarAppearance,
+    badgeBackground: UIColor?,
+    badgeText: UIColor?
+  ) {
+    guard badgeBackground != nil || badgeText != nil else { return }
+
+    let states = [
+      appearance.stackedLayoutAppearance.normal,
+      appearance.stackedLayoutAppearance.selected,
+      appearance.inlineLayoutAppearance.normal,
+      appearance.inlineLayoutAppearance.selected,
+      appearance.compactInlineLayoutAppearance.normal,
+      appearance.compactInlineLayoutAppearance.selected,
+    ]
+
+    for state in states {
+      if let badgeBackground = badgeBackground {
+        state.badgeBackgroundColor = badgeBackground
+      }
+      if let badgeText = badgeText {
+        state.badgeTextAttributes = [.foregroundColor: badgeText]
+      }
+    }
   }
 
   /// Re-applies current badge values and per-item badge colors to all live items.
