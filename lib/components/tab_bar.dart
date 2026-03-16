@@ -435,6 +435,14 @@ class _CNTabBarState extends State<CNTabBar> {
               resolveColorToArgb(e.icon?.color ?? e.imageAsset?.color, context),
         )
         .toList();
+    final activeColors = widget.items
+        .map(
+          (e) => resolveColorToArgb(
+              e.activeIcon?.color ?? e.activeImageAsset?.color ??
+              e.icon?.color ?? e.imageAsset?.color, 
+              context),
+        )
+        .toList();
     final itemPaddings = widget.items.map((e) {
       final p = e.padding;
       if (p == null) return null;
@@ -487,6 +495,7 @@ class _CNTabBarState extends State<CNTabBar> {
       'iconScale': capturedDevicePixelRatio, // Pass the scale!
       'sfSymbolSizes': sizes,
       'sfSymbolColors': colors,
+      'sfSymbolActiveColors': activeColors,
       'itemPaddings': itemPaddings,
       'selectedIndex': widget.currentIndex,
       'isDark': capturedIsDark,
@@ -715,6 +724,7 @@ class _CNTabBarState extends State<CNTabBar> {
     final idx = widget.currentIndex;
     final bg = resolveColorToArgb(widget.backgroundColor, context);
     final iconScale = MediaQuery.of(context).devicePixelRatio;
+    final labelStyleParams = _buildLabelStyleParams(context);
 
     try {
       if (_lastIndex != idx) {
@@ -727,7 +737,6 @@ class _CNTabBarState extends State<CNTabBar> {
         style['backgroundColor'] = bg;
         _lastBg = bg;
       }
-      final labelStyleParams = _buildLabelStyleParams(context);
       if (labelStyleParams != null) {
         style['labelStyle'] = labelStyleParams;
       }
@@ -765,8 +774,27 @@ class _CNTabBarState extends State<CNTabBar> {
           symbolsChanged ||
           activeSymbolsChanged ||
           badgesChanged) {
+        final colors = widget.items
+            .map(
+              (e) => resolveColorToArgb(
+                e.icon?.color ?? e.imageAsset?.color,
+                context,
+              ),
+            )
+            .toList();
+        final activeColors = widget.items
+            .map(
+              (e) => resolveColorToArgb(
+                  e.activeIcon?.color ?? e.activeImageAsset?.color ??
+                  e.icon?.color ?? e.imageAsset?.color, 
+                  context),
+            )
+            .toList();
+
         // Re-render custom icons if items changed
         final iconBytes = await _renderCustomIcons();
+        if (!mounted) return;
+        
         final customIconBytes = iconBytes[0];
         final activeCustomIconBytes = iconBytes[1];
 
@@ -811,14 +839,6 @@ class _CNTabBarState extends State<CNTabBar> {
             .map((e) => e.icon?.size ?? e.imageAsset?.size)
             .toList();
 
-        final colors = widget.items
-            .map(
-              (e) => resolveColorToArgb(
-                e.icon?.color ?? e.imageAsset?.color,
-                context,
-              ),
-            )
-            .toList();
         await ch.invokeMethod('setItems', {
           'labels': labels,
           'sfSymbols': symbols,
@@ -836,6 +856,7 @@ class _CNTabBarState extends State<CNTabBar> {
           'selectedIndex': widget.currentIndex,
           'sfSymbolSizes': sizes,
           'sfSymbolColors': colors,
+          'sfSymbolActiveColors': activeColors,
         });
         _lastLabels = labels;
         _lastSymbols = symbols;

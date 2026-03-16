@@ -33,6 +33,7 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
   private var currentItemPaddings: [[Double]]? = nil
   private var iconAboveLabel: Bool = true
   private var currentColors: [NSNumber?] = []
+  private var currentActiveColors: [NSNumber?] = []
   private var currentBgColor: UIColor? = nil
 
   init(frame: CGRect, viewId: Int64, args: Any?, messenger: FlutterBinaryMessenger) {
@@ -54,6 +55,7 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
     var iconScale: CGFloat = UIScreen.main.scale
     var sizes: [NSNumber?] = []
     var colors: [NSNumber?] = []
+    var activeColors: [NSNumber?] = []
     var selectedIndex: Int = 0
     var isDark: Bool = false
     var tint: UIColor? = nil
@@ -89,6 +91,7 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
       }
       sizes = (dict["sfSymbolSizes"] as? [NSNumber?]) ?? []
       colors = (dict["sfSymbolColors"] as? [NSNumber?]) ?? []
+      activeColors = (dict["sfSymbolActiveColors"] as? [NSNumber?]) ?? []
       if let v = dict["selectedIndex"] as? NSNumber { selectedIndex = v.intValue }
       if let v = dict["isDark"] as? NSNumber { isDark = v.boolValue }
       if let style = dict["style"] as? [String: Any] {
@@ -132,10 +135,15 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
     let appearance: UITabBarAppearance? = {
     if #available(iOS 13.0, *) {
       let ap = UITabBarAppearance()
-      ap.configureWithTransparentBackground()
+      if let bg = bg {
+        // If backgroundColor is explicitly set, use opaque background to render it properly
+        ap.configureWithOpaqueBackground()
+        ap.backgroundColor = bg
+      } else {
+        ap.configureWithTransparentBackground()
+      }
       ap.shadowColor = .clear
       ap.shadowImage = UIImage()
-      if let bg = bg { ap.backgroundColor = bg }
       Self.applyLabelStyle(to: ap, labelStyle: self.currentLabelStyle, tint: tint)
       return ap
     }
@@ -188,8 +196,15 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
         }
 
         let itemColor = Self.colorForItem(index: i, colors: colors)
-        image = Self.applyItemColor(image, color: itemColor)
-        selectedImage = Self.applyItemColor(selectedImage, color: itemColor)
+        let activeItemColor = Self.colorForItem(index: i, colors: activeColors)
+        if itemColor != nil {
+          image = Self.applyItemColor(image, color: itemColor)
+        }
+        if activeItemColor != nil {
+          selectedImage = Self.applyItemColor(selectedImage, color: activeItemColor)
+        } else if itemColor != nil {
+          selectedImage = Self.applyItemColor(selectedImage, color: itemColor)
+        }
         let title = (i < labels.count && !labels[i].isEmpty) ? labels[i] : nil
         let item = UITabBarItem(title: title, image: image, selectedImage: selectedImage)
         if i < badges.count && !badges[i].isEmpty {
@@ -383,6 +398,7 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
     self.rightInsetVal = rightInset
     self.currentIconSizes = sizes.compactMap { $0 }.map { CGFloat(truncating: $0) }
     self.currentColors = colors
+    self.currentActiveColors = activeColors
     self.currentBgColor = bg
 channel.setMethodCallHandler { [weak self] call, result in
       guard let self = self else { result(nil); return }
@@ -446,10 +462,11 @@ channel.setMethodCallHandler { [weak self] call, result in
           self.currentActiveImageAssetData = activeImageAssetData
           self.currentImageAssetFormats = imageAssetFormats
           self.currentActiveImageAssetFormats = activeImageAssetFormats
-          // Store icon sizes for dynamic height calculation
           self.currentIconSizes = sizes.compactMap { $0?.doubleValue }.map { CGFloat($0) }
           let colors = (args["sfSymbolColors"] as? [NSNumber?]) ?? self.currentColors
           self.currentColors = colors
+          let activeColors = (args["sfSymbolActiveColors"] as? [NSNumber?]) ?? self.currentActiveColors
+          self.currentActiveColors = activeColors
           func buildItems(_ range: Range<Int>) -> [UITabBarItem] {
             var items: [UITabBarItem] = []
             for i in range {
@@ -491,8 +508,15 @@ channel.setMethodCallHandler { [weak self] call, result in
               }
 
               let itemColor = Self.colorForItem(index: i, colors: colors)
-              image = Self.applyItemColor(image, color: itemColor)
-              selectedImage = Self.applyItemColor(selectedImage, color: itemColor)
+              let activeItemColor = Self.colorForItem(index: i, colors: activeColors)
+              if itemColor != nil {
+                image = Self.applyItemColor(image, color: itemColor)
+              }
+              if activeItemColor != nil {
+                selectedImage = Self.applyItemColor(selectedImage, color: activeItemColor)
+              } else if itemColor != nil {
+                selectedImage = Self.applyItemColor(selectedImage, color: itemColor)
+              }
               let title = (i < labels.count && !labels[i].isEmpty) ? labels[i] : nil
               let item = UITabBarItem(title: title, image: image, selectedImage: selectedImage)
               if i < badges.count && !badges[i].isEmpty {
@@ -558,17 +582,23 @@ channel.setMethodCallHandler { [weak self] call, result in
           let appearance: UITabBarAppearance? = {
             if #available(iOS 13.0, *) {
               let ap = UITabBarAppearance()
-              ap.configureWithTransparentBackground()
+              if let bg = self.currentBgColor {
+                ap.configureWithOpaqueBackground()
+                ap.backgroundColor = bg
+              } else {
+                ap.configureWithTransparentBackground()
+              }
               ap.shadowColor = .clear
               ap.shadowImage = UIImage()
-              if let bg = self.currentBgColor { ap.backgroundColor = bg }
               Self.applyLabelStyle(to: ap, labelStyle: labelStyle, tint: nil)
               return ap
             }
             return nil
           }()
+          let labelStyle = self.currentLabelStyle
           let iconSizes = self.currentIconSizes
           let colors = self.currentColors
+          let activeColors = self.currentActiveColors
           func buildItems(_ range: Range<Int>) -> [UITabBarItem] {
             var items: [UITabBarItem] = []
             for i in range {
@@ -609,8 +639,15 @@ channel.setMethodCallHandler { [weak self] call, result in
               }
 
               let itemColor = Self.colorForItem(index: i, colors: colors)
-              image = Self.applyItemColor(image, color: itemColor)
-              selectedImage = Self.applyItemColor(selectedImage, color: itemColor)
+              let activeItemColor = Self.colorForItem(index: i, colors: activeColors)
+              if itemColor != nil {
+                image = Self.applyItemColor(image, color: itemColor)
+              }
+              if activeItemColor != nil {
+                selectedImage = Self.applyItemColor(selectedImage, color: activeItemColor)
+              } else if itemColor != nil {
+                selectedImage = Self.applyItemColor(selectedImage, color: itemColor)
+              }
               let title = (i < labels.count && !labels[i].isEmpty) ? labels[i] : nil
               let item = UITabBarItem(title: title, image: image, selectedImage: selectedImage)
               if i < badges.count && !badges[i].isEmpty {
@@ -828,7 +865,12 @@ channel.setMethodCallHandler { [weak self] call, result in
               let allBars: [UITabBar] = [self.tabBar, self.tabBarLeft, self.tabBarRight].compactMap { $0 }
               for bar in allBars {
                 let ap = UITabBarAppearance()
-                ap.configureWithTransparentBackground()
+                if let bg = self.currentBgColor {
+                  ap.configureWithOpaqueBackground()
+                  ap.backgroundColor = bg
+                } else {
+                  ap.configureWithTransparentBackground()
+                }
                 ap.shadowColor = .clear
                 ap.shadowImage = UIImage()
                 Self.applyLabelStyle(to: ap, labelStyle: ls, tint: tintColor ?? bar.tintColor)
