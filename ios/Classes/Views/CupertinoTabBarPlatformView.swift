@@ -148,10 +148,7 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
       let hasCustomBadgeSizing =
         Self.hasAnyPositive(values: self.currentBadgeDotSizes) ||
         Self.hasAnyPositive(values: self.currentBadgeFontSizes)
-      let hasCustomDotSizing = Self.hasAnyPositive(values: self.currentBadgeDotSizes)
-      let badgeBackground = hasCustomDotSizing
-        ? nil
-        : Self.firstNonNilColor(colors: self.currentBadgeColors)
+      let badgeBackground = Self.firstNonNilColor(colors: self.currentBadgeColors)
       let badgeText = Self.firstNonNilColor(colors: self.currentBadgeTextColors)
       let badgeFontSize = hasCustomBadgeSizing
         ? nil
@@ -628,10 +625,7 @@ channel.setMethodCallHandler { [weak self] call, result in
               let hasCustomBadgeSizing =
                 Self.hasAnyPositive(values: self.currentBadgeDotSizes) ||
                 Self.hasAnyPositive(values: self.currentBadgeFontSizes)
-              let hasCustomDotSizing = Self.hasAnyPositive(values: self.currentBadgeDotSizes)
-              let badgeBackground = hasCustomDotSizing
-                ? nil
-                : Self.firstNonNilColor(colors: self.currentBadgeColors)
+              let badgeBackground = Self.firstNonNilColor(colors: self.currentBadgeColors)
               let badgeText = Self.firstNonNilColor(colors: self.currentBadgeTextColors)
               let badgeFontSize = hasCustomBadgeSizing
                 ? nil
@@ -921,10 +915,7 @@ channel.setMethodCallHandler { [weak self] call, result in
                   let hasCustomBadgeSizing =
                     Self.hasAnyPositive(values: self.currentBadgeDotSizes) ||
                     Self.hasAnyPositive(values: self.currentBadgeFontSizes)
-                  let hasCustomDotSizing = Self.hasAnyPositive(values: self.currentBadgeDotSizes)
-                  let badgeBackground = hasCustomDotSizing
-                    ? nil
-                    : Self.firstNonNilColor(colors: self.currentBadgeColors)
+                  let badgeBackground = Self.firstNonNilColor(colors: self.currentBadgeColors)
                   let badgeText = Self.firstNonNilColor(colors: self.currentBadgeTextColors)
                   let badgeFontSize = hasCustomBadgeSizing
                     ? nil
@@ -968,10 +959,7 @@ channel.setMethodCallHandler { [weak self] call, result in
               let hasCustomBadgeSizing =
                 Self.hasAnyPositive(values: badgeDotSizes) ||
                 Self.hasAnyPositive(values: badgeFontSizes)
-              let hasCustomDotSizing = Self.hasAnyPositive(values: badgeDotSizes)
-              let badgeBackground = hasCustomDotSizing
-                ? nil
-                : Self.firstNonNilColor(colors: badgeColors)
+              let badgeBackground = Self.firstNonNilColor(colors: badgeColors)
               let badgeText = Self.firstNonNilColor(colors: badgeTextColors)
               let badgeFontSize = hasCustomBadgeSizing
                 ? nil
@@ -1271,8 +1259,8 @@ channel.setMethodCallHandler { [weak self] call, result in
     if isDot, let dotSize = badgeDotSize {
       item.badgeValue = "●"
       if #available(iOS 10.0, *) {
-        item.badgeColor = .clear
         let dotColor = badgeBackgroundColor ?? badgeTextColor ?? UIColor.systemRed
+        item.badgeColor = dotColor
         let attrs = badgeTextAttributes(textColor: dotColor, fontSize: dotSize)
         if !attrs.isEmpty {
           item.setBadgeTextAttributes(attrs, for: .normal)

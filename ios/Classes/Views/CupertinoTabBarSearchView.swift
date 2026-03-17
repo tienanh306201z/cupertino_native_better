@@ -424,8 +424,8 @@ class CupertinoTabBarSearchPlatformView: NSObject, FlutterPlatformView, UITabBar
         if isDot, let dotSize = badgeDotSize {
             item.badgeValue = "●"
             if #available(iOS 10.0, *) {
-                item.badgeColor = .clear
                 let dotColor = badgeBackgroundColor ?? badgeTextColor ?? UIColor.systemRed
+                item.badgeColor = dotColor
                 let attrs = badgeTextAttributes(textColor: dotColor, fontSize: dotSize)
                 if !attrs.isEmpty {
                     item.setBadgeTextAttributes(attrs, for: .normal)
