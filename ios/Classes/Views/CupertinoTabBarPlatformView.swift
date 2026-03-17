@@ -148,12 +148,12 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
       let hasCustomBadgeSizing =
         Self.hasAnyPositive(values: self.currentBadgeDotSizes) ||
         Self.hasAnyPositive(values: self.currentBadgeFontSizes)
-      if !hasCustomBadgeSizing {
-        let badgeBackground = Self.firstNonNilColor(colors: self.currentBadgeColors)
-        let badgeText = Self.firstNonNilColor(colors: self.currentBadgeTextColors)
-        let badgeFontSize = Self.firstNonNilCGFloat(values: self.currentBadgeFontSizes)
-        Self.applyBadgeStyle(to: ap, badgeBackground: badgeBackground, badgeText: badgeText, badgeFontSize: badgeFontSize)
-      }
+      let badgeBackground = Self.firstNonNilColor(colors: self.currentBadgeColors)
+      let badgeText = Self.firstNonNilColor(colors: self.currentBadgeTextColors)
+      let badgeFontSize = hasCustomBadgeSizing
+        ? nil
+        : Self.firstNonNilCGFloat(values: self.currentBadgeFontSizes)
+      Self.applyBadgeStyle(to: ap, badgeBackground: badgeBackground, badgeText: badgeText, badgeFontSize: badgeFontSize)
       return ap
     }
     return nil
@@ -625,12 +625,12 @@ channel.setMethodCallHandler { [weak self] call, result in
               let hasCustomBadgeSizing =
                 Self.hasAnyPositive(values: self.currentBadgeDotSizes) ||
                 Self.hasAnyPositive(values: self.currentBadgeFontSizes)
-              if !hasCustomBadgeSizing {
-                let badgeBackground = Self.firstNonNilColor(colors: self.currentBadgeColors)
-                let badgeText = Self.firstNonNilColor(colors: self.currentBadgeTextColors)
-                let badgeFontSize = Self.firstNonNilCGFloat(values: self.currentBadgeFontSizes)
-                Self.applyBadgeStyle(to: ap, badgeBackground: badgeBackground, badgeText: badgeText, badgeFontSize: badgeFontSize)
-              }
+              let badgeBackground = Self.firstNonNilColor(colors: self.currentBadgeColors)
+              let badgeText = Self.firstNonNilColor(colors: self.currentBadgeTextColors)
+              let badgeFontSize = hasCustomBadgeSizing
+                ? nil
+                : Self.firstNonNilCGFloat(values: self.currentBadgeFontSizes)
+              Self.applyBadgeStyle(to: ap, badgeBackground: badgeBackground, badgeText: badgeText, badgeFontSize: badgeFontSize)
               return ap
             }
             return nil
@@ -915,12 +915,12 @@ channel.setMethodCallHandler { [weak self] call, result in
                   let hasCustomBadgeSizing =
                     Self.hasAnyPositive(values: self.currentBadgeDotSizes) ||
                     Self.hasAnyPositive(values: self.currentBadgeFontSizes)
-                  if !hasCustomBadgeSizing {
-                    let badgeBackground = Self.firstNonNilColor(colors: self.currentBadgeColors)
-                    let badgeText = Self.firstNonNilColor(colors: self.currentBadgeTextColors)
-                    let badgeFontSize = Self.firstNonNilCGFloat(values: self.currentBadgeFontSizes)
-                    Self.applyBadgeStyle(to: ap, badgeBackground: badgeBackground, badgeText: badgeText, badgeFontSize: badgeFontSize)
-                  }
+                  let badgeBackground = Self.firstNonNilColor(colors: self.currentBadgeColors)
+                  let badgeText = Self.firstNonNilColor(colors: self.currentBadgeTextColors)
+                  let badgeFontSize = hasCustomBadgeSizing
+                    ? nil
+                    : Self.firstNonNilCGFloat(values: self.currentBadgeFontSizes)
+                  Self.applyBadgeStyle(to: ap, badgeBackground: badgeBackground, badgeText: badgeText, badgeFontSize: badgeFontSize)
                 bar.standardAppearance = ap
                 if #available(iOS 15.0, *) { bar.scrollEdgeAppearance = ap }
               }
@@ -959,12 +959,12 @@ channel.setMethodCallHandler { [weak self] call, result in
               let hasCustomBadgeSizing =
                 Self.hasAnyPositive(values: badgeDotSizes) ||
                 Self.hasAnyPositive(values: badgeFontSizes)
-              if !hasCustomBadgeSizing {
-                let badgeBackground = Self.firstNonNilColor(colors: badgeColors)
-                let badgeText = Self.firstNonNilColor(colors: badgeTextColors)
-                let badgeFontSize = Self.firstNonNilCGFloat(values: badgeFontSizes)
-                Self.applyBadgeStyle(to: ap, badgeBackground: badgeBackground, badgeText: badgeText, badgeFontSize: badgeFontSize)
-              }
+              let badgeBackground = Self.firstNonNilColor(colors: badgeColors)
+              let badgeText = Self.firstNonNilColor(colors: badgeTextColors)
+              let badgeFontSize = hasCustomBadgeSizing
+                ? nil
+                : Self.firstNonNilCGFloat(values: badgeFontSizes)
+              Self.applyBadgeStyle(to: ap, badgeBackground: badgeBackground, badgeText: badgeText, badgeFontSize: badgeFontSize)
               bar.standardAppearance = ap
               if #available(iOS 15.0, *) { bar.scrollEdgeAppearance = ap }
             }
