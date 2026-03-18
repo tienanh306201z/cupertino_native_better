@@ -183,7 +183,31 @@ class _LiquidTabBarState extends State<LiquidTabBar> {
       if (!mounted) return;
       _syncPropsToNativeIfNeeded();
       _syncBrightnessIfNeeded();
+      _forceLayoutSyncAfterReassemble();
     });
+  }
+
+  Future<void> _forceLayoutSyncAfterReassemble() async {
+    final ch = _channel;
+    if (ch == null || !mounted) return;
+    try {
+      final availableWidth = MediaQuery.of(context).size.width;
+      await ch.invokeMethod('setLayout', {
+        'split': widget.split,
+        'rightCount': widget.rightCount,
+        'splitSpacing': widget.splitSpacing,
+        'iconAboveLabel': widget.iconAboveLabel,
+        'availableWidth': availableWidth,
+        'selectedIndex': widget.currentIndex,
+      });
+      _lastSplit = widget.split;
+      _lastRightCount = widget.rightCount;
+      _lastSplitSpacing = widget.splitSpacing;
+      _lastIconAboveLabel = widget.iconAboveLabel;
+      _requestIntrinsicSize();
+    } catch (_) {
+      // Ignore MissingPluginException during hot reload / recreation
+    }
   }
 
   void _onSearchControllerChanged() {

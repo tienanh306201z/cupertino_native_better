@@ -39,6 +39,8 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
   private var currentBadgeTextColors: [NSNumber?] = []
   private var currentBadgeDotSizes: [NSNumber?] = []
   private var currentBadgeFontSizes: [NSNumber?] = []
+  private var activeSplitConstraints: [NSLayoutConstraint] = []
+  private var activeSingleConstraints: [NSLayoutConstraint] = []
 
   init(frame: CGRect, viewId: Int64, args: Any?, messenger: FlutterBinaryMessenger) {
     self.channel = FlutterMethodChannel(name: "CupertinoNativeTabBar_\(viewId)", binaryMessenger: messenger)
@@ -239,6 +241,7 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
     }
     let count = max(labels.count, symbols.count)
     if split && count > rightCount {
+      NSLog("🧭 [CN_TABBAR_INIT_SPLIT] count=\(count) rightCount=\(rightCount)")
       let leftEnd = count - rightCount
       let left = UITabBar(frame: .zero)
       let right = UITabBar(frame: .zero)
@@ -272,48 +275,58 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
       container.addSubview(left); container.addSubview(right)
       // Compute content-fitting widths for both bars and apply symmetric spacing
       let spacing: CGFloat = splitSpacingVal
-      let leftWidth = left.sizeThatFits(.zero).width + leftInset * 2
-      let rightWidth = right.sizeThatFits(.zero).width + rightInset * 2
-      let total = leftWidth + rightWidth + spacing
-      
-      // Ensure minimum width for single items to maintain circular shape
-      // Following Apple's HIG: minimum 44pt touch target, with 8pt spacing
-      let minItemWidth: CGFloat = 88.0 // Wide enough for icon + label without truncation
-      let adjustedRightWidth = max(rightWidth, minItemWidth * CGFloat(rightCount))
-      let adjustedLeftWidth = max(leftWidth, minItemWidth * CGFloat(count - rightCount))
-      let adjustedTotal = adjustedLeftWidth + adjustedRightWidth + spacing
-      
-      // If total exceeds container, fall back to proportional widths
-      let availableWidth = container.bounds.width > 0 ? container.bounds.width : UIScreen.main.bounds.width
-      print("🔍 [init] leftWidth=\(leftWidth) rightWidth=\(rightWidth) adjLeft=\(adjustedLeftWidth) adjRight=\(adjustedRightWidth) adjTotal=\(adjustedTotal) available=\(availableWidth) containerBounds=\(container.bounds.width) screenBounds=\(UIScreen.main.bounds.width)")
-      if adjustedTotal > availableWidth {
-        let rightFraction = CGFloat(rightCount) / CGFloat(count)
-        NSLayoutConstraint.activate([
-          right.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -rightInset),
-          right.topAnchor.constraint(equalTo: container.topAnchor),
-          right.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-          right.widthAnchor.constraint(equalTo: container.widthAnchor, multiplier: rightFraction),
-          left.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: leftInset),
-          left.trailingAnchor.constraint(equalTo: right.leadingAnchor, constant: -spacing),
-          left.topAnchor.constraint(equalTo: container.topAnchor),
-          left.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-        ])
-      } else {
-        // Center both panels as a group using direct anchor math.
-        // left.leading = container.centerX - totalGroupWidth/2
-        let halfTotal = (adjustedLeftWidth + spacing + adjustedRightWidth) / 2
-        NSLayoutConstraint.activate([
-          left.leadingAnchor.constraint(equalTo: container.centerXAnchor, constant: -halfTotal),
-          left.widthAnchor.constraint(equalToConstant: adjustedLeftWidth),
-          left.topAnchor.constraint(equalTo: container.topAnchor),
-          left.bottomAnchor.constraint(equalTo: container.bottomAnchor),
 
-          right.leadingAnchor.constraint(equalTo: left.trailingAnchor, constant: spacing),
-          right.widthAnchor.constraint(equalToConstant: adjustedRightWidth),
-          right.topAnchor.constraint(equalTo: container.topAnchor),
-          right.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-        ])
+      // Ensure minimum width for items; keep this value identical in init/setLayout.
+      // Wider baseline keeps split groups visually balanced on iPad.
+      let minItemWidth: CGFloat = 88.0
+
+      // Use a stable width basis to avoid init vs hot-reload branch flips.
+      let availableWidth = max(container.bounds.width, UIScreen.main.bounds.width)
+
+      let leftItemCount = CGFloat(max(1, count - rightCount))
+      let rightItemCount = CGFloat(max(1, rightCount))
+      let leftFallbackWidth = minItemWidth * leftItemCount + leftInset * 2
+      let rightFallbackWidth = minItemWidth * rightItemCount + rightInset * 2
+
+      let leftFittedWidth = left.sizeThatFits(.zero).width + leftInset * 2
+      let rightFittedWidth = right.sizeThatFits(.zero).width + rightInset * 2
+      let leftFittedInvalid = leftFittedWidth <= 0 || leftFittedWidth >= availableWidth * 0.95
+      let rightFittedInvalid = rightFittedWidth <= 0 || rightFittedWidth >= availableWidth * 0.95
+
+      let leftWidth = leftFittedInvalid ? leftFallbackWidth : max(leftFittedWidth, leftFallbackWidth)
+      let rightWidth = rightFittedInvalid ? rightFallbackWidth : max(rightFittedWidth, rightFallbackWidth)
+
+      let adjustedRightWidth = rightWidth
+      let adjustedLeftWidth = leftWidth
+      let adjustedTotal = adjustedLeftWidth + adjustedRightWidth + spacing
+      var resolvedLeftWidth = adjustedLeftWidth
+      var resolvedRightWidth = adjustedRightWidth
+      let shouldScaleDown = adjustedTotal > availableWidth
+      if shouldScaleDown {
+        let usable = max(0, availableWidth - spacing)
+        let totalItems = max(1, count)
+        let leftFraction = CGFloat(count - rightCount) / CGFloat(totalItems)
+        let rightFraction = CGFloat(rightCount) / CGFloat(totalItems)
+        resolvedLeftWidth = usable * leftFraction
+        resolvedRightWidth = usable * rightFraction
       }
+
+      NSLog("🧭 [CN_TABBAR_INIT_LAYOUT] leftWidth=\(leftWidth) rightWidth=\(rightWidth) adjLeft=\(adjustedLeftWidth) adjRight=\(adjustedRightWidth) resolvedLeft=\(resolvedLeftWidth) resolvedRight=\(resolvedRightWidth) adjTotal=\(adjustedTotal) available=\(availableWidth) scaled=\(shouldScaleDown) leftFitInvalid=\(leftFittedInvalid) rightFitInvalid=\(rightFittedInvalid) containerBounds=\(container.bounds.width)")
+
+      // Always center both panels as one group to avoid hot-reload drift.
+      let halfTotal = (resolvedLeftWidth + spacing + resolvedRightWidth) / 2
+      self.activeSplitConstraints = [
+        left.leadingAnchor.constraint(equalTo: container.centerXAnchor, constant: -halfTotal),
+        left.widthAnchor.constraint(equalToConstant: resolvedLeftWidth),
+        left.topAnchor.constraint(equalTo: container.topAnchor),
+        left.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+
+        right.leadingAnchor.constraint(equalTo: left.trailingAnchor, constant: spacing),
+        right.widthAnchor.constraint(equalToConstant: resolvedRightWidth),
+        right.topAnchor.constraint(equalTo: container.topAnchor),
+        right.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+      ]
+      NSLayoutConstraint.activate(self.activeSplitConstraints)
       // Force layout update for background and text rendering on iOS < 16
       // Re-assign items after layout to ensure labels render properly
       // Capture selectedIndex for restoration after item re-assignment
@@ -372,12 +385,13 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
       bar.items = buildItems(0..<count)
       if selectedIndex >= 0, let items = bar.items, selectedIndex < items.count { bar.selectedItem = items[selectedIndex] }
       container.addSubview(bar)
-      NSLayoutConstraint.activate([
+      self.activeSingleConstraints = [
         bar.leadingAnchor.constraint(equalTo: container.leadingAnchor),
         bar.trailingAnchor.constraint(equalTo: container.trailingAnchor),
         bar.topAnchor.constraint(equalTo: container.topAnchor),
         bar.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-      ])
+      ]
+      NSLayoutConstraint.activate(self.activeSingleConstraints)
       // Force layout update for background and text rendering on iOS < 16
       // Re-assign items after layout to ensure labels render properly
       DispatchQueue.main.async { [weak self, weak bar] in
@@ -599,6 +613,10 @@ channel.setMethodCallHandler { [weak self] call, result in
           let dartAvailableWidth = (args["availableWidth"] as? NSNumber).map { CGFloat($0.doubleValue) }
           let selectedIndex = (args["selectedIndex"] as? NSNumber)?.intValue ?? 0
           // Remove existing bars and any stale layout guide
+          NSLayoutConstraint.deactivate(self.activeSplitConstraints)
+          NSLayoutConstraint.deactivate(self.activeSingleConstraints)
+          self.activeSplitConstraints = []
+          self.activeSingleConstraints = []
           self.tabBar?.removeFromSuperview(); self.tabBar = nil
           self.tabBarLeft?.removeFromSuperview(); self.tabBarLeft = nil
           self.tabBarRight?.removeFromSuperview(); self.tabBarRight = nil
@@ -712,6 +730,7 @@ channel.setMethodCallHandler { [weak self] call, result in
           }
           let count = max(labels.count, symbols.count)
           if split && count > rightCount {
+            NSLog("🧭 [CN_TABBAR_SETLAYOUT_SPLIT] count=\(count) rightCount=\(rightCount)")
             let leftEnd = count - rightCount
             let left = UITabBar(frame: .zero)
             let right = UITabBar(frame: .zero)
@@ -736,45 +755,59 @@ channel.setMethodCallHandler { [weak self] call, result in
             else if let items = right.items { let idx = selectedIndex - leftEnd; if idx >= 0 && idx < items.count { right.selectedItem = items[idx]; left.selectedItem = nil } }
             self.container.addSubview(left); self.container.addSubview(right)
             let spacing: CGFloat = splitSpacingVal
-            let leftWidth = left.sizeThatFits(.zero).width + leftInset * 2
-            let rightWidth = right.sizeThatFits(.zero).width + rightInset * 2
-            let total = leftWidth + rightWidth + spacing
-            
-            // Ensure minimum width for single items to maintain circular shape
-            let minItemWidth: CGFloat = 88.0 // Wide enough for icon + label without truncation
-            let adjustedRightWidth = max(rightWidth, minItemWidth * CGFloat(rightCount))
-            let adjustedLeftWidth = max(leftWidth, minItemWidth * CGFloat(count - rightCount))
-            let adjustedTotal = adjustedLeftWidth + adjustedRightWidth + spacing
-            
-            let availableWidth = dartAvailableWidth ?? (self.container.bounds.width > 0 ? self.container.bounds.width : UIScreen.main.bounds.width)
-            print("🔍 [setLayout] leftWidth=\(leftWidth) rightWidth=\(rightWidth) adjLeft=\(adjustedLeftWidth) adjRight=\(adjustedRightWidth) adjTotal=\(adjustedTotal) available=\(availableWidth) dartAvail=\(String(describing: dartAvailableWidth)) containerBounds=\(self.container.bounds.width) screenBounds=\(UIScreen.main.bounds.width)")
-            if adjustedTotal > availableWidth {
-              let rightFraction = CGFloat(rightCount) / CGFloat(count)
-              NSLayoutConstraint.activate([
-                right.trailingAnchor.constraint(equalTo: self.container.trailingAnchor, constant: -rightInset),
-                right.topAnchor.constraint(equalTo: self.container.topAnchor),
-                right.bottomAnchor.constraint(equalTo: self.container.bottomAnchor),
-                right.widthAnchor.constraint(equalTo: self.container.widthAnchor, multiplier: rightFraction),
-                left.leadingAnchor.constraint(equalTo: self.container.leadingAnchor, constant: leftInset),
-                left.trailingAnchor.constraint(equalTo: right.leadingAnchor, constant: -spacing),
-                left.topAnchor.constraint(equalTo: self.container.topAnchor),
-                left.bottomAnchor.constraint(equalTo: self.container.bottomAnchor),
-              ])
-            } else {
-              // Center both panels as a group using direct anchor math.
-              let halfTotal = (adjustedLeftWidth + spacing + adjustedRightWidth) / 2
-              NSLayoutConstraint.activate([
-                left.leadingAnchor.constraint(equalTo: self.container.centerXAnchor, constant: -halfTotal),
-                left.widthAnchor.constraint(equalToConstant: adjustedLeftWidth),
-                left.topAnchor.constraint(equalTo: self.container.topAnchor),
-                left.bottomAnchor.constraint(equalTo: self.container.bottomAnchor),
 
-                right.leadingAnchor.constraint(equalTo: left.trailingAnchor, constant: spacing),
-                right.widthAnchor.constraint(equalToConstant: adjustedRightWidth),
-                right.topAnchor.constraint(equalTo: self.container.topAnchor),
-                right.bottomAnchor.constraint(equalTo: self.container.bottomAnchor),
-              ])
+            // Ensure minimum width for items; keep this value identical in init/setLayout.
+            // Wider baseline keeps split groups visually balanced on iPad.
+            let minItemWidth: CGFloat = 88.0
+
+            // Use the same stable width basis as init to avoid branch divergence.
+            let widthFromDart = dartAvailableWidth ?? 0
+            let availableWidth = max(max(widthFromDart, self.container.bounds.width), UIScreen.main.bounds.width)
+
+            let leftItemCount = CGFloat(max(1, count - rightCount))
+            let rightItemCount = CGFloat(max(1, rightCount))
+            let leftFallbackWidth = minItemWidth * leftItemCount + leftInset * 2
+            let rightFallbackWidth = minItemWidth * rightItemCount + rightInset * 2
+
+            let leftFittedWidth = left.sizeThatFits(.zero).width + leftInset * 2
+            let rightFittedWidth = right.sizeThatFits(.zero).width + rightInset * 2
+            let leftFittedInvalid = leftFittedWidth <= 0 || leftFittedWidth >= availableWidth * 0.95
+            let rightFittedInvalid = rightFittedWidth <= 0 || rightFittedWidth >= availableWidth * 0.95
+
+            let leftWidth = leftFittedInvalid ? leftFallbackWidth : max(leftFittedWidth, leftFallbackWidth)
+            let rightWidth = rightFittedInvalid ? rightFallbackWidth : max(rightFittedWidth, rightFallbackWidth)
+
+            let adjustedRightWidth = rightWidth
+            let adjustedLeftWidth = leftWidth
+            let adjustedTotal = adjustedLeftWidth + adjustedRightWidth + spacing
+            var resolvedLeftWidth = adjustedLeftWidth
+            var resolvedRightWidth = adjustedRightWidth
+            let shouldScaleDown = adjustedTotal > availableWidth
+            if shouldScaleDown {
+              let usable = max(0, availableWidth - spacing)
+              let totalItems = max(1, count)
+              let leftFraction = CGFloat(count - rightCount) / CGFloat(totalItems)
+              let rightFraction = CGFloat(rightCount) / CGFloat(totalItems)
+              resolvedLeftWidth = usable * leftFraction
+              resolvedRightWidth = usable * rightFraction
             }
+
+            NSLog("🧭 [CN_TABBAR_SETLAYOUT_LAYOUT] leftWidth=\(leftWidth) rightWidth=\(rightWidth) adjLeft=\(adjustedLeftWidth) adjRight=\(adjustedRightWidth) resolvedLeft=\(resolvedLeftWidth) resolvedRight=\(resolvedRightWidth) adjTotal=\(adjustedTotal) available=\(availableWidth) scaled=\(shouldScaleDown) leftFitInvalid=\(leftFittedInvalid) rightFitInvalid=\(rightFittedInvalid) dartAvail=\(String(describing: dartAvailableWidth)) containerBounds=\(self.container.bounds.width)")
+
+            // Always center both panels as one group to avoid hot-reload drift.
+            let halfTotal = (resolvedLeftWidth + spacing + resolvedRightWidth) / 2
+            self.activeSplitConstraints = [
+              left.leadingAnchor.constraint(equalTo: self.container.centerXAnchor, constant: -halfTotal),
+              left.widthAnchor.constraint(equalToConstant: resolvedLeftWidth),
+              left.topAnchor.constraint(equalTo: self.container.topAnchor),
+              left.bottomAnchor.constraint(equalTo: self.container.bottomAnchor),
+
+              right.leadingAnchor.constraint(equalTo: left.trailingAnchor, constant: spacing),
+              right.widthAnchor.constraint(equalToConstant: resolvedRightWidth),
+              right.topAnchor.constraint(equalTo: self.container.topAnchor),
+              right.bottomAnchor.constraint(equalTo: self.container.bottomAnchor),
+            ]
+            NSLayoutConstraint.activate(self.activeSplitConstraints)
             // Force layout update for background and text rendering on iOS < 16
             // Re-assign items after layout to ensure labels render properly
             // Capture selectedIndex for restoration after item re-assignment
@@ -832,12 +865,13 @@ channel.setMethodCallHandler { [weak self] call, result in
             bar.items = buildItems(0..<count)
             if let items = bar.items, selectedIndex >= 0, selectedIndex < items.count { bar.selectedItem = items[selectedIndex] }
             self.container.addSubview(bar)
-            NSLayoutConstraint.activate([
+            self.activeSingleConstraints = [
               bar.leadingAnchor.constraint(equalTo: self.container.leadingAnchor),
               bar.trailingAnchor.constraint(equalTo: self.container.trailingAnchor),
               bar.topAnchor.constraint(equalTo: self.container.topAnchor),
               bar.bottomAnchor.constraint(equalTo: self.container.bottomAnchor),
-            ])
+            ]
+            NSLayoutConstraint.activate(self.activeSingleConstraints)
             // Force layout update for background and text rendering on iOS < 16
             // Re-assign items after layout to ensure labels render properly
             DispatchQueue.main.async { [weak self, weak bar] in
