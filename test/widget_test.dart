@@ -1,15 +1,12 @@
+import 'package:cupertino_native_better/cupertino_native_better.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:cupertino_native_better/cupertino_native_better.dart';
 
 void main() {
   group('CNSearchBar', () {
     // Helper to build CNSearchBar with proper MediaQuery constraints
-    Widget buildSearchBarTest({
-      required Widget child,
-      Size screenSize = const Size(350, 600),
-    }) {
+    Widget buildSearchBarTest({required Widget child, Size screenSize = const Size(350, 600)}) {
       return MaterialApp(
         home: MediaQuery(
           data: MediaQueryData(size: screenSize),
@@ -18,9 +15,7 @@ void main() {
       );
     }
 
-    testWidgets('renders with default placeholder when expanded', (
-      tester,
-    ) async {
+    testWidgets('renders with default placeholder when expanded', (tester) async {
       await tester.pumpWidget(
         buildSearchBarTest(
           child: const CNSearchBar(
@@ -37,18 +32,8 @@ void main() {
       expect(find.byType(CupertinoTextField), findsOneWidget);
     });
 
-    testWidgets('renders with custom placeholder when expanded', (
-      tester,
-    ) async {
-      await tester.pumpWidget(
-        buildSearchBarTest(
-          child: const CNSearchBar(
-            placeholder: 'Find items...',
-            expandable: false,
-            showCancelButton: false,
-          ),
-        ),
-      );
+    testWidgets('renders with custom placeholder when expanded', (tester) async {
+      await tester.pumpWidget(buildSearchBarTest(child: const CNSearchBar(placeholder: 'Find items...', expandable: false, showCancelButton: false)));
 
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 350));
@@ -81,15 +66,7 @@ void main() {
     testWidgets('calls onSubmitted when search is submitted', (tester) async {
       String? submittedText;
 
-      await tester.pumpWidget(
-        buildSearchBarTest(
-          child: CNSearchBar(
-            expandable: false,
-            showCancelButton: false,
-            onSubmitted: (text) => submittedText = text,
-          ),
-        ),
-      );
+      await tester.pumpWidget(buildSearchBarTest(child: CNSearchBar(expandable: false, showCancelButton: false, onSubmitted: (text) => submittedText = text)));
 
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 350));
@@ -105,12 +82,7 @@ void main() {
       await tester.pumpWidget(
         buildSearchBarTest(
           screenSize: const Size(500, 600), // Wider to fit cancel button
-          child: const CNSearchBar(
-            expandable: false,
-            initiallyExpanded: true,
-            showCancelButton: true,
-            cancelText: 'Cancel',
-          ),
+          child: const CNSearchBar(expandable: false, initiallyExpanded: true, showCancelButton: true, cancelText: 'Cancel'),
         ),
       );
 
@@ -138,10 +110,7 @@ void main() {
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
-            body: CNFloatingIsland(
-              collapsed: Text('Collapsed'),
-              expanded: Text('Expanded'),
-            ),
+            body: CNFloatingIsland(collapsed: Text('Collapsed'), expanded: Text('Expanded')),
           ),
         ),
       );
@@ -153,10 +122,7 @@ void main() {
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
-            body: CNFloatingIsland(
-              collapsed: Text('Bottom'),
-              position: CNFloatingIslandPosition.bottom,
-            ),
+            body: CNFloatingIsland(collapsed: Text('Bottom'), position: CNFloatingIslandPosition.bottom),
           ),
         ),
       );
@@ -170,10 +136,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: CNFloatingIsland(
-              collapsed: const Text('Tap me'),
-              onTap: () => tapped = true,
-            ),
+            body: CNFloatingIsland(collapsed: const Text('Tap me'), onTap: () => tapped = true),
           ),
         ),
       );
@@ -184,17 +147,11 @@ void main() {
       expect(tapped, true);
     });
 
-    testWidgets('shows expanded content when isExpanded is true', (
-      tester,
-    ) async {
+    testWidgets('shows expanded content when isExpanded is true', (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
-            body: CNFloatingIsland(
-              collapsed: Text('Collapsed'),
-              expanded: Text('Expanded Content'),
-              isExpanded: true,
-            ),
+            body: CNFloatingIsland(collapsed: Text('Collapsed'), expanded: Text('Expanded Content'), isExpanded: true),
           ),
         ),
       );
@@ -229,14 +186,8 @@ void main() {
   group('CNFloatingIslandPosition', () {
     test('has top and bottom values', () {
       expect(CNFloatingIslandPosition.values.length, 2);
-      expect(
-        CNFloatingIslandPosition.values,
-        contains(CNFloatingIslandPosition.top),
-      );
-      expect(
-        CNFloatingIslandPosition.values,
-        contains(CNFloatingIslandPosition.bottom),
-      );
+      expect(CNFloatingIslandPosition.values, contains(CNFloatingIslandPosition.top));
+      expect(CNFloatingIslandPosition.values, contains(CNFloatingIslandPosition.bottom));
     });
   });
 
@@ -290,14 +241,8 @@ void main() {
           home: Scaffold(
             body: CNGlassButtonGroup(
               buttons: [
-                CNButtonData(
-                  label: 'Button 1',
-                  onPressed: () => button1Pressed = true,
-                ),
-                CNButtonData(
-                  label: 'Button 2',
-                  onPressed: () => button2Pressed = true,
-                ),
+                CNButtonData(label: 'Button 1', onPressed: () => button1Pressed = true),
+                CNButtonData(label: 'Button 2', onPressed: () => button2Pressed = true),
               ],
             ),
           ),
@@ -407,7 +352,7 @@ void main() {
 
   group('CNTabBarSearchItem', () {
     test('creates search item with defaults', () {
-      const item = CNTabBarSearchItem();
+      const item = LiquidTabBarSearchItem();
 
       expect(item.placeholder, 'Search');
       expect(item.automaticallyActivatesSearch, true);
@@ -423,7 +368,7 @@ void main() {
       var searchSubmitCalled = false;
       var searchActiveChangedCalled = false;
 
-      final item = CNTabBarSearchItem(
+      final item = LiquidTabBarSearchItem(
         icon: icon,
         placeholder: 'Find customer',
         automaticallyActivatesSearch: false,
@@ -446,9 +391,9 @@ void main() {
     });
 
     test('equality and hashCode', () {
-      const item1 = CNTabBarSearchItem(placeholder: 'Search');
-      const item2 = CNTabBarSearchItem(placeholder: 'Search');
-      const item3 = CNTabBarSearchItem(placeholder: 'Find');
+      const item1 = LiquidTabBarSearchItem(placeholder: 'Search');
+      const item2 = LiquidTabBarSearchItem(placeholder: 'Search');
+      const item3 = LiquidTabBarSearchItem(placeholder: 'Find');
 
       expect(item1, equals(item2));
       expect(item1.hashCode, equals(item2.hashCode));
@@ -509,10 +454,7 @@ void main() {
       expect(style.searchBarHeight, 50.0);
       expect(style.searchBarBorderRadius, 12.0);
       expect(style.searchBarPadding, const EdgeInsets.all(16));
-      expect(
-        style.contentPadding,
-        const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-      );
+      expect(style.contentPadding, const EdgeInsets.symmetric(horizontal: 20, vertical: 10));
       expect(style.spacing, 16.0);
       expect(style.animationDuration, const Duration(milliseconds: 500));
       expect(style.showClearButton, false);
@@ -530,15 +472,8 @@ void main() {
     });
 
     test('search item uses style', () {
-      const style = CNTabBarSearchStyle(
-        iconSize: 22.0,
-        buttonSize: 46.0,
-        showClearButton: false,
-      );
-      const item = CNTabBarSearchItem(
-        placeholder: 'Custom Search',
-        style: style,
-      );
+      const style = CNTabBarSearchStyle(iconSize: 22.0, buttonSize: 46.0, showClearButton: false);
+      const item = LiquidTabBarSearchItem(placeholder: 'Custom Search', style: style);
 
       expect(item.style.iconSize, 22.0);
       expect(item.style.buttonSize, 46.0);
@@ -548,14 +483,14 @@ void main() {
 
   group('CNTabBarSearchController', () {
     test('creates controller with defaults', () {
-      final controller = CNTabBarSearchController();
+      final controller = LiquidTabBarSearchController();
 
       expect(controller.text, '');
       expect(controller.isActive, false);
     });
 
     test('text setter notifies listeners', () {
-      final controller = CNTabBarSearchController();
+      final controller = LiquidTabBarSearchController();
       var notified = false;
 
       controller.addListener(() => notified = true);
@@ -566,7 +501,7 @@ void main() {
     });
 
     test('activateSearch sets isActive to true', () {
-      final controller = CNTabBarSearchController();
+      final controller = LiquidTabBarSearchController();
       var notified = false;
 
       controller.addListener(() => notified = true);
@@ -577,7 +512,7 @@ void main() {
     });
 
     test('deactivateSearch sets isActive to false', () {
-      final controller = CNTabBarSearchController();
+      final controller = LiquidTabBarSearchController();
       controller.activateSearch();
 
       var notified = false;
@@ -589,7 +524,7 @@ void main() {
     });
 
     test('clear clears text and optionally deactivates', () {
-      final controller = CNTabBarSearchController();
+      final controller = LiquidTabBarSearchController();
       controller.text = 'query';
       controller.activateSearch();
 
@@ -604,7 +539,7 @@ void main() {
     });
 
     test('updateFromNative updates state', () {
-      final controller = CNTabBarSearchController();
+      final controller = LiquidTabBarSearchController();
       var notified = false;
 
       controller.addListener(() => notified = true);
@@ -616,32 +551,27 @@ void main() {
     });
 
     test('dispose works correctly', () {
-      final controller = CNTabBarSearchController();
+      final controller = LiquidTabBarSearchController();
       controller.dispose();
       // Should not throw
     });
   });
 
   group('CNTabBar with search', () {
-    testWidgets('renders tab bar with search item (Flutter fallback)', (
-      tester,
-    ) async {
+    testWidgets('renders tab bar with search item (Flutter fallback)', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
             body: SizedBox(
               height: 60,
-              child: CNTabBar(
+              child: LiquidTabBar(
                 items: [
-                  CNTabBarItem(label: 'Home', icon: CNSymbol('house')),
-                  CNTabBarItem(label: 'Settings', icon: CNSymbol('gear')),
+                  LiquidTabBarItem(label: 'Home', icon: CNSymbol('house')),
+                  LiquidTabBarItem(label: 'Settings', icon: CNSymbol('gear')),
                 ],
                 currentIndex: 0,
                 onTap: (_) {},
-                searchItem: CNTabBarSearchItem(
-                  placeholder: 'Search',
-                  onSearchChanged: (_) {},
-                ),
+                searchItem: LiquidTabBarSearchItem(placeholder: 'Search', onSearchChanged: (_) {}),
               ),
             ),
           ),
@@ -661,11 +591,11 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: CNTabBar(
+            body: LiquidTabBar(
               items: [
-                CNTabBarItem(label: 'Home', icon: CNSymbol('house')),
-                CNTabBarItem(label: 'Profile', icon: CNSymbol('person')),
-                CNTabBarItem(label: 'Settings', icon: CNSymbol('gear')),
+                LiquidTabBarItem(label: 'Home', icon: CNSymbol('house')),
+                LiquidTabBarItem(label: 'Profile', icon: CNSymbol('person')),
+                LiquidTabBarItem(label: 'Settings', icon: CNSymbol('gear')),
               ],
               currentIndex: 0,
               onTap: (_) {},
@@ -685,10 +615,10 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: CNTabBar(
+            body: LiquidTabBar(
               items: [
-                CNTabBarItem(label: 'Home', icon: CNSymbol('house')),
-                CNTabBarItem(label: 'Settings', icon: CNSymbol('gear')),
+                LiquidTabBarItem(label: 'Home', icon: CNSymbol('house')),
+                LiquidTabBarItem(label: 'Settings', icon: CNSymbol('gear')),
               ],
               currentIndex: selectedIndex,
               onTap: (index) => selectedIndex = index,
@@ -707,7 +637,7 @@ void main() {
   group('CNTabBarItem', () {
     test('creates item with SF Symbol', () {
       const icon = CNSymbol('house');
-      const item = CNTabBarItem(label: 'Home', icon: icon);
+      const item = LiquidTabBarItem(label: 'Home', icon: icon);
 
       expect(item.label, 'Home');
       expect(item.icon, icon);
@@ -715,11 +645,7 @@ void main() {
     });
 
     test('creates item with badge', () {
-      const item = CNTabBarItem(
-        label: 'Messages',
-        icon: CNSymbol('message'),
-        badge: '5',
-      );
+      const item = LiquidTabBarItem(label: 'Messages', icon: CNSymbol('message'), badge: '5');
 
       expect(item.label, 'Messages');
       expect(item.badge, '5');
@@ -728,11 +654,7 @@ void main() {
     test('creates item with active icon', () {
       const icon = CNSymbol('house');
       const activeIcon = CNSymbol('house.fill');
-      const item = CNTabBarItem(
-        label: 'Home',
-        icon: icon,
-        activeIcon: activeIcon,
-      );
+      const item = LiquidTabBarItem(label: 'Home', icon: icon, activeIcon: activeIcon);
 
       expect(item.icon, icon);
       expect(item.activeIcon, activeIcon);
@@ -741,22 +663,14 @@ void main() {
     test('creates item with image asset', () {
       final asset = CNImageAsset('assets/icon.png');
       final activeAsset = CNImageAsset('assets/icon_active.png');
-      final item = CNTabBarItem(
-        label: 'Custom',
-        imageAsset: asset,
-        activeImageAsset: activeAsset,
-      );
+      final item = LiquidTabBarItem(label: 'Custom', imageAsset: asset, activeImageAsset: activeAsset);
 
       expect(item.imageAsset, asset);
       expect(item.activeImageAsset, activeAsset);
     });
 
     test('creates item with custom IconData', () {
-      const item = CNTabBarItem(
-        label: 'Custom',
-        customIcon: Icons.home,
-        activeCustomIcon: Icons.home_filled,
-      );
+      const item = LiquidTabBarItem(label: 'Custom', customIcon: Icons.home, activeCustomIcon: Icons.home_filled);
 
       expect(item.customIcon, Icons.home);
       expect(item.activeCustomIcon, Icons.home_filled);

@@ -66,12 +66,12 @@ class _BottomNavIndexedTestPageState extends State<BottomNavIndexedTestPage> {
           ),
           SafeArea(
             top: false,
-            child: CNTabBar(
+            child: LiquidTabBar(
               items: [
-                CNTabBarItem(label: 'Home', icon: CNSymbol('house'), activeIcon: CNSymbol('house.fill')),
-                CNTabBarItem(label: 'Browse', icon: CNSymbol('square.grid.2x2'), activeIcon: CNSymbol('square.grid.2x2.fill')),
-                CNTabBarItem(label: 'Library', icon: CNSymbol('books.vertical'), activeIcon: CNSymbol('books.vertical.fill')),
-                CNTabBarItem(label: 'Profile', icon: CNSymbol('person'), activeIcon: CNSymbol('person.fill')),
+                LiquidTabBarItem(label: 'Home', icon: CNSymbol('house'), activeIcon: CNSymbol('house.fill')),
+                LiquidTabBarItem(label: 'Browse', icon: CNSymbol('square.grid.2x2'), activeIcon: CNSymbol('square.grid.2x2.fill')),
+                LiquidTabBarItem(label: 'Library', icon: CNSymbol('books.vertical'), activeIcon: CNSymbol('books.vertical.fill')),
+                LiquidTabBarItem(label: 'Profile', icon: CNSymbol('person'), activeIcon: CNSymbol('person.fill')),
               ],
               currentIndex: _currentIndex,
               onTap: _onTabTap,

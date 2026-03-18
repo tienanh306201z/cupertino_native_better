@@ -32,33 +32,34 @@ class _BottomNavCustomIconsTestPageState
           Expanded(child: _buildCurrentScreen()),
           SafeArea(
             top: false,
-            child: CNTabBar(
+            child: LiquidTabBar(
               items: [
-                CNTabBarItem(
+                LiquidTabBarItem(
                   label: 'Home',
                   imageAsset: CNImageAsset('assets/icons/home.svg', size: _iconSize),
                   activeImageAsset:
                       CNImageAsset('assets/icons/home_filled.svg', size: _iconSize),
                 ),
-                CNTabBarItem(
+                LiquidTabBarItem(
                   label: 'Search',
                   imageAsset: CNImageAsset('assets/icons/search.svg', size: _iconSize),
                   activeImageAsset:
                       CNImageAsset('assets/icons/search-filled.svg', size: _iconSize),
                 ),
-                CNTabBarItem(
+                LiquidTabBarItem(
                   label: 'Chat',
                   imageAsset: CNImageAsset('assets/icons/chat.svg', size: _iconSize),
                   activeImageAsset:
                       CNImageAsset('assets/icons/chat-filled.svg', size: _iconSize),
                 ),
-                CNTabBarItem(
-                  label: 'Profile',
+                LiquidTabBarItem(
                   imageAsset: CNImageAsset('assets/icons/profile.svg', size: _iconSize),
                   activeImageAsset:
                       CNImageAsset('assets/icons/profile-filled.svg', size: _iconSize),
                 ),
               ],
+              split: true,
+              splitSpacing: 0,
               currentIndex: _currentIndex,
               onTap: (index) => setState(() => _currentIndex = index),
             ),

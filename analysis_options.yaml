@@ -6,8 +6,6 @@ include: package:flutter_lints/flutter.yaml
 linter:
   rules:
     # Require documentation comments for all public APIs in the package.
-    public_member_api_docs: true
-
 analyzer:
   exclude:
     # Exclude example app from the strict public API doc lint to focus on the

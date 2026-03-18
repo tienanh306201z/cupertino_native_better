@@ -5,19 +5,14 @@ import 'package:flutter/services.dart';
 import '../channel/params.dart';
 import '../style/sf_symbol.dart';
 import '../style/tab_bar_search_item.dart';
-import '../utils/version_detector.dart';
 import '../utils/theme_helper.dart';
+import '../utils/version_detector.dart';
 import 'tab_bar.dart';
 
 /// A search scaffold item configuration.
 class CNSearchScaffoldItem {
   /// Creates a search scaffold item.
-  const CNSearchScaffoldItem({
-    this.label,
-    this.icon,
-    this.activeIcon,
-    this.isSearchTab = false,
-  });
+  const CNSearchScaffoldItem({this.label, this.icon, this.activeIcon, this.isSearchTab = false});
 
   /// The label for the tab.
   final String? label;
@@ -39,7 +34,7 @@ class CNSearchScaffoldItem {
 /// This widget uses `UITabBarController` with `UISearchController` on iOS 26+
 /// to achieve the native liquid glass morphing effect when search is activated.
 ///
-/// Unlike [CNTabBar], this widget manages the entire screen layout, with
+/// Unlike [LiquidTabBar], this widget manages the entire screen layout, with
 /// Flutter content rendered on top of the native tab bar controller.
 ///
 /// Example:
@@ -75,10 +70,7 @@ class CNSearchScaffold extends StatefulWidget {
     this.onSearchActiveChanged,
     this.searchPlaceholder = 'Search',
     this.searchController,
-  }) : assert(
-         items.length == children.length,
-         'items and children must have same length',
-       ),
+  }) : assert(items.length == children.length, 'items and children must have same length'),
        assert(items.length >= 2, 'Must have at least 2 items');
 
   /// Items to display in the tab bar.
@@ -113,7 +105,7 @@ class CNSearchScaffold extends StatefulWidget {
   final String searchPlaceholder;
 
   /// Optional controller for programmatic search management.
-  final CNTabBarSearchController? searchController;
+  final LiquidTabBarSearchController? searchController;
 
   @override
   State<CNSearchScaffold> createState() => _CNSearchScaffoldState();
@@ -126,13 +118,11 @@ class _CNSearchScaffoldState extends State<CNSearchScaffold> {
   String _searchText = '';
 
   bool get _isDark => ThemeHelper.isDark(context);
-  Color? get _effectiveTint =>
-      widget.tint ?? ThemeHelper.getPrimaryColor(context);
+  Color? get _effectiveTint => widget.tint ?? ThemeHelper.getPrimaryColor(context);
 
   // Search tab index (can be used for conditional logic)
   // ignore: unused_element
-  int get _searchTabIndex =>
-      widget.items.indexWhere((item) => item.isSearchTab);
+  int get _searchTabIndex => widget.items.indexWhere((item) => item.isSearchTab);
 
   @override
   void initState() {
@@ -199,9 +189,7 @@ class _CNSearchScaffoldState extends State<CNSearchScaffold> {
   Widget _buildNativeScaffold(BuildContext context) {
     final labels = widget.items.map((e) => e.label ?? '').toList();
     final symbols = widget.items.map((e) => e.icon?.name ?? '').toList();
-    final activeSymbols = widget.items
-        .map((e) => e.activeIcon?.name ?? e.icon?.name ?? '')
-        .toList();
+    final activeSymbols = widget.items.map((e) => e.activeIcon?.name ?? e.icon?.name ?? '').toList();
     final searchFlags = widget.items.map((e) => e.isSearchTab).toList();
 
     final creationParams = <String, dynamic>{
@@ -212,13 +200,7 @@ class _CNSearchScaffoldState extends State<CNSearchScaffold> {
       'selectedIndex': widget.currentIndex,
       'isDark': _isDark,
       'style': encodeStyle(context, tint: _effectiveTint)
-        ..addAll({
-          if (widget.unselectedTint != null)
-            'unselectedTint': resolveColorToArgb(
-              widget.unselectedTint,
-              context,
-            ),
-        }),
+        ..addAll({if (widget.unselectedTint != null) 'unselectedTint': resolveColorToArgb(widget.unselectedTint, context)}),
       'searchPlaceholder': widget.searchPlaceholder,
     };
 
@@ -239,10 +221,7 @@ class _CNSearchScaffoldState extends State<CNSearchScaffold> {
             children: [
               // Content area (above tab bar)
               Expanded(
-                child: IndexedStack(
-                  index: widget.currentIndex,
-                  children: widget.children,
-                ),
+                child: IndexedStack(index: widget.currentIndex, children: widget.children),
               ),
               // Safe area padding for tab bar
               SizedBox(height: MediaQuery.of(context).padding.bottom + 49),

@@ -18,16 +18,9 @@ import 'package:flutter/widgets.dart';
 /// )
 /// ```
 @immutable
-class CNTabBarLabelStyle {
+class LiquidTabBarLabelStyle {
   /// Creates a tab bar label style configuration.
-  const CNTabBarLabelStyle({
-    this.fontSize,
-    this.fontWeight,
-    this.color,
-    this.activeColor,
-    this.fontFamily,
-    this.letterSpacing,
-  });
+  const LiquidTabBarLabelStyle({this.fontSize, this.fontWeight, this.color, this.activeColor, this.fontFamily, this.letterSpacing});
 
   /// Font size for the tab label text.
   ///
@@ -65,7 +58,7 @@ class CNTabBarLabelStyle {
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
-    return other is CNTabBarLabelStyle &&
+    return other is LiquidTabBarLabelStyle &&
         other.fontSize == fontSize &&
         other.fontWeight == fontWeight &&
         other.color == color &&
@@ -75,12 +68,5 @@ class CNTabBarLabelStyle {
   }
 
   @override
-  int get hashCode => Object.hash(
-        fontSize,
-        fontWeight,
-        color,
-        activeColor,
-        fontFamily,
-        letterSpacing,
-      );
+  int get hashCode => Object.hash(fontSize, fontWeight, color, activeColor, fontFamily, letterSpacing);
 }

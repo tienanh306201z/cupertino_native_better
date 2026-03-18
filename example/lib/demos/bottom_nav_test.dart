@@ -53,24 +53,24 @@ class _BottomNavTestPageState extends State<BottomNavTestPage> {
           // CNTabBar at bottom
           SafeArea(
             top: false,
-            child: CNTabBar(
+            child: LiquidTabBar(
               items: [
-                CNTabBarItem(
+                LiquidTabBarItem(
                   label: 'Home',
                   icon: CNSymbol('house', size: _iconSize),
                   activeIcon: CNSymbol('house.fill', size: _iconSize),
                 ),
-                CNTabBarItem(
+                LiquidTabBarItem(
                   label: 'Browse',
                   icon: CNSymbol('square.grid.2x2', size: _iconSize),
                   activeIcon: CNSymbol('square.grid.2x2.fill', size: _iconSize),
                 ),
-                CNTabBarItem(
+                LiquidTabBarItem(
                   label: 'Library',
                   icon: CNSymbol('books.vertical', size: _iconSize),
                   activeIcon: CNSymbol('books.vertical.fill', size: _iconSize),
                 ),
-                CNTabBarItem(
+                LiquidTabBarItem(
                   label: 'Profile',
                   icon: CNSymbol('person', size: _iconSize),
                   activeIcon: CNSymbol('person.fill', size: _iconSize),

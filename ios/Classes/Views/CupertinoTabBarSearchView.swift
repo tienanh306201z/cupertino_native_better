@@ -8,6 +8,7 @@ class CupertinoTabBarSearchPlatformView: NSObject, FlutterPlatformView, UITabBar
     private let channel: FlutterMethodChannel
     private let container: UIView
     private var tabBar: UITabBar?
+    private var glassView: UIView?
 
     // State
     private var currentLabels: [String] = []
@@ -24,6 +25,7 @@ class CupertinoTabBarSearchPlatformView: NSObject, FlutterPlatformView, UITabBar
     private var unselectedTintColor: UIColor?
     private var searchPlaceholder: String = "Search"
     private var searchLabel: String = "Search"
+    private var iconLabelSpacing: CGFloat = 0
 
     // Search tab is always the last item
     private var searchItemIndex: Int = -1
@@ -63,6 +65,9 @@ class CupertinoTabBarSearchPlatformView: NSObject, FlutterPlatformView, UITabBar
             }
             searchPlaceholder = (dict["searchPlaceholder"] as? String) ?? "Search"
             searchLabel = (dict["searchLabel"] as? String) ?? "Search"
+            if let v = dict["iconLabelSpacing"] as? NSNumber {
+                iconLabelSpacing = CGFloat(v.doubleValue)
+            }
         }
 
         container.backgroundColor = .clear
@@ -110,6 +115,14 @@ class CupertinoTabBarSearchPlatformView: NSObject, FlutterPlatformView, UITabBar
             }
         }
 
+        // Shared glass background — bar has transparent appearance so we own the glass
+        let glass = UIVisualEffectView(effect: UIGlassEffect())
+        glass.translatesAutoresizingMaskIntoConstraints = false
+        glass.layer.cornerRadius = 20
+        glass.layer.cornerCurve = .continuous
+        glass.clipsToBounds = true
+        glassView = glass
+        container.addSubview(glass)
         container.addSubview(bar)
 
         NSLayoutConstraint.activate([
@@ -117,6 +130,10 @@ class CupertinoTabBarSearchPlatformView: NSObject, FlutterPlatformView, UITabBar
             bar.trailingAnchor.constraint(equalTo: container.trailingAnchor),
             bar.topAnchor.constraint(equalTo: container.topAnchor),
             bar.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            glass.leadingAnchor.constraint(equalTo: bar.leadingAnchor),
+            glass.trailingAnchor.constraint(equalTo: bar.trailingAnchor),
+            glass.topAnchor.constraint(equalTo: bar.topAnchor),
+            glass.bottomAnchor.constraint(equalTo: bar.bottomAnchor),
         ])
     }
 
@@ -151,6 +168,12 @@ class CupertinoTabBarSearchPlatformView: NSObject, FlutterPlatformView, UITabBar
 
             let item = UITabBarItem(title: title, image: image, selectedImage: selectedImage)
             item.tag = i
+
+            if iconLabelSpacing > 0 {
+                let half = iconLabelSpacing / 2
+                item.imageInsets = UIEdgeInsets(top: -half, left: 0, bottom: half, right: 0)
+                item.titlePositionAdjustment = UIOffset(horizontal: 0, vertical: half)
+            }
 
             if !badge.isEmpty {
                 Self.applyBadge(

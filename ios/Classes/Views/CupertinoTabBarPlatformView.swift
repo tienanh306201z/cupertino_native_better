@@ -32,6 +32,7 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
   private var currentLabelStyle: [String: Any]? = nil
   private var currentItemPaddings: [[Double]]? = nil
   private var iconAboveLabel: Bool = true
+  private var splitLayoutGuide: UILayoutGuide?
   private var currentColors: [NSNumber?] = []
   private var currentActiveColors: [NSNumber?] = []
   private var currentBadgeColors: [NSNumber?] = []
@@ -141,7 +142,8 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
     let appearance: UITabBarAppearance? = {
     if #available(iOS 13.0, *) {
       let ap = UITabBarAppearance()
-      ap.configureWithTransparentBackground()
+      ap.configureWithDefaultBackground()
+      ap.backgroundColor = .clear
       ap.shadowColor = .clear
       ap.shadowImage = UIImage()
       Self.applyLabelStyle(to: ap, labelStyle: self.currentLabelStyle, tint: tint)
@@ -276,13 +278,15 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
       
       // Ensure minimum width for single items to maintain circular shape
       // Following Apple's HIG: minimum 44pt touch target, with 8pt spacing
-      let minItemWidth: CGFloat = 44.0 // Apple's minimum touch target size
+      let minItemWidth: CGFloat = 88.0 // Wide enough for icon + label without truncation
       let adjustedRightWidth = max(rightWidth, minItemWidth * CGFloat(rightCount))
       let adjustedLeftWidth = max(leftWidth, minItemWidth * CGFloat(count - rightCount))
       let adjustedTotal = adjustedLeftWidth + adjustedRightWidth + spacing
       
       // If total exceeds container, fall back to proportional widths
-      if adjustedTotal > container.bounds.width {
+      let availableWidth = container.bounds.width > 0 ? container.bounds.width : UIScreen.main.bounds.width
+      print("🔍 [init] leftWidth=\(leftWidth) rightWidth=\(rightWidth) adjLeft=\(adjustedLeftWidth) adjRight=\(adjustedRightWidth) adjTotal=\(adjustedTotal) available=\(availableWidth) containerBounds=\(container.bounds.width) screenBounds=\(UIScreen.main.bounds.width)")
+      if adjustedTotal > availableWidth {
         let rightFraction = CGFloat(rightCount) / CGFloat(count)
         NSLayoutConstraint.activate([
           right.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -rightInset),
@@ -295,25 +299,19 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
           left.bottomAnchor.constraint(equalTo: container.bottomAnchor),
         ])
       } else {
-        let guide = UILayoutGuide()
-        container.addLayoutGuide(guide)
-        let guideWidth = adjustedLeftWidth + spacing + adjustedRightWidth
+        // Center both panels as a group using direct anchor math.
+        // left.leading = container.centerX - totalGroupWidth/2
+        let halfTotal = (adjustedLeftWidth + spacing + adjustedRightWidth) / 2
         NSLayoutConstraint.activate([
-          guide.centerXAnchor.constraint(equalTo: container.centerXAnchor),
-          guide.widthAnchor.constraint(equalToConstant: guideWidth),
-          guide.topAnchor.constraint(equalTo: container.topAnchor),
-          guide.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-          
-          left.leadingAnchor.constraint(equalTo: guide.leadingAnchor),
+          left.leadingAnchor.constraint(equalTo: container.centerXAnchor, constant: -halfTotal),
+          left.widthAnchor.constraint(equalToConstant: adjustedLeftWidth),
           left.topAnchor.constraint(equalTo: container.topAnchor),
           left.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-          left.widthAnchor.constraint(equalToConstant: adjustedLeftWidth),
-          
+
           right.leadingAnchor.constraint(equalTo: left.trailingAnchor, constant: spacing),
-          right.trailingAnchor.constraint(equalTo: guide.trailingAnchor),
+          right.widthAnchor.constraint(equalToConstant: adjustedRightWidth),
           right.topAnchor.constraint(equalTo: container.topAnchor),
           right.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-          right.widthAnchor.constraint(equalToConstant: adjustedRightWidth),
         ])
       }
       // Force layout update for background and text rendering on iOS < 16
@@ -597,11 +595,14 @@ channel.setMethodCallHandler { [weak self] call, result in
           let leftInset = self.leftInsetVal
           let rightInset = self.rightInsetVal
           if let sp = args["splitSpacing"] as? NSNumber { self.splitSpacingVal = CGFloat(truncating: sp) }
+          if let ial = args["iconAboveLabel"] as? NSNumber { self.iconAboveLabel = ial.boolValue }
+          let dartAvailableWidth = (args["availableWidth"] as? NSNumber).map { CGFloat($0.doubleValue) }
           let selectedIndex = (args["selectedIndex"] as? NSNumber)?.intValue ?? 0
-          // Remove existing bars
+          // Remove existing bars and any stale layout guide
           self.tabBar?.removeFromSuperview(); self.tabBar = nil
           self.tabBarLeft?.removeFromSuperview(); self.tabBarLeft = nil
           self.tabBarRight?.removeFromSuperview(); self.tabBarRight = nil
+          if let old = self.splitLayoutGuide { self.container.removeLayoutGuide(old); self.splitLayoutGuide = nil }
           let labels = self.currentLabels
           let symbols = self.currentSymbols
           let activeSymbols = self.currentActiveSymbols
@@ -618,7 +619,8 @@ channel.setMethodCallHandler { [weak self] call, result in
           let appearance: UITabBarAppearance? = {
             if #available(iOS 13.0, *) {
               let ap = UITabBarAppearance()
-              ap.configureWithTransparentBackground()
+              ap.configureWithDefaultBackground()
+      ap.backgroundColor = .clear
               ap.shadowColor = .clear
               ap.shadowImage = UIImage()
               Self.applyLabelStyle(to: ap, labelStyle: labelStyle, tint: nil)
@@ -739,12 +741,14 @@ channel.setMethodCallHandler { [weak self] call, result in
             let total = leftWidth + rightWidth + spacing
             
             // Ensure minimum width for single items to maintain circular shape
-            let minItemWidth: CGFloat = 50.0 // Minimum width per item
+            let minItemWidth: CGFloat = 88.0 // Wide enough for icon + label without truncation
             let adjustedRightWidth = max(rightWidth, minItemWidth * CGFloat(rightCount))
             let adjustedLeftWidth = max(leftWidth, minItemWidth * CGFloat(count - rightCount))
             let adjustedTotal = adjustedLeftWidth + adjustedRightWidth + spacing
             
-            if adjustedTotal > self.container.bounds.width {
+            let availableWidth = dartAvailableWidth ?? (self.container.bounds.width > 0 ? self.container.bounds.width : UIScreen.main.bounds.width)
+            print("🔍 [setLayout] leftWidth=\(leftWidth) rightWidth=\(rightWidth) adjLeft=\(adjustedLeftWidth) adjRight=\(adjustedRightWidth) adjTotal=\(adjustedTotal) available=\(availableWidth) dartAvail=\(String(describing: dartAvailableWidth)) containerBounds=\(self.container.bounds.width) screenBounds=\(UIScreen.main.bounds.width)")
+            if adjustedTotal > availableWidth {
               let rightFraction = CGFloat(rightCount) / CGFloat(count)
               NSLayoutConstraint.activate([
                 right.trailingAnchor.constraint(equalTo: self.container.trailingAnchor, constant: -rightInset),
@@ -757,25 +761,18 @@ channel.setMethodCallHandler { [weak self] call, result in
                 left.bottomAnchor.constraint(equalTo: self.container.bottomAnchor),
               ])
             } else {
-              let guide = UILayoutGuide()
-              self.container.addLayoutGuide(guide)
-              let guideWidth = adjustedLeftWidth + spacing + adjustedRightWidth
+              // Center both panels as a group using direct anchor math.
+              let halfTotal = (adjustedLeftWidth + spacing + adjustedRightWidth) / 2
               NSLayoutConstraint.activate([
-                guide.centerXAnchor.constraint(equalTo: self.container.centerXAnchor),
-                guide.widthAnchor.constraint(equalToConstant: guideWidth),
-                guide.topAnchor.constraint(equalTo: self.container.topAnchor),
-                guide.bottomAnchor.constraint(equalTo: self.container.bottomAnchor),
-                
-                left.leadingAnchor.constraint(equalTo: guide.leadingAnchor),
+                left.leadingAnchor.constraint(equalTo: self.container.centerXAnchor, constant: -halfTotal),
+                left.widthAnchor.constraint(equalToConstant: adjustedLeftWidth),
                 left.topAnchor.constraint(equalTo: self.container.topAnchor),
                 left.bottomAnchor.constraint(equalTo: self.container.bottomAnchor),
-                left.widthAnchor.constraint(equalToConstant: adjustedLeftWidth),
-                
+
                 right.leadingAnchor.constraint(equalTo: left.trailingAnchor, constant: spacing),
-                right.trailingAnchor.constraint(equalTo: guide.trailingAnchor),
+                right.widthAnchor.constraint(equalToConstant: adjustedRightWidth),
                 right.topAnchor.constraint(equalTo: self.container.topAnchor),
                 right.bottomAnchor.constraint(equalTo: self.container.bottomAnchor),
-                right.widthAnchor.constraint(equalToConstant: adjustedRightWidth),
               ])
             }
             // Force layout update for background and text rendering on iOS < 16
@@ -902,25 +899,31 @@ channel.setMethodCallHandler { [weak self] call, result in
             if let left = self.tabBarLeft { left.tintColor = c }
             if let right = self.tabBarRight { right.tintColor = c }
           }
+          let hasClearLabelStyle = (args["clearLabelStyle"] as? NSNumber)?.boolValue == true
           if let ls = args["labelStyle"] as? [String: Any] {
             self.currentLabelStyle = ls
+          } else if hasClearLabelStyle {
+            self.currentLabelStyle = nil
+          }
+          if args["labelStyle"] is [String: Any] || hasClearLabelStyle {
             if #available(iOS 13.0, *) {
               let allBars: [UITabBar] = [self.tabBar, self.tabBarLeft, self.tabBarRight].compactMap { $0 }
               for bar in allBars {
                 let ap = UITabBarAppearance()
-                ap.configureWithTransparentBackground()
+                ap.configureWithDefaultBackground()
+      ap.backgroundColor = .clear
                 ap.shadowColor = .clear
                 ap.shadowImage = UIImage()
-                Self.applyLabelStyle(to: ap, labelStyle: ls, tint: tintColor ?? bar.tintColor)
-                  let hasCustomBadgeSizing =
-                    Self.hasAnyPositive(values: self.currentBadgeDotSizes) ||
-                    Self.hasAnyPositive(values: self.currentBadgeFontSizes)
-                  let badgeBackground = Self.firstNonNilColor(colors: self.currentBadgeColors)
-                  let badgeText = Self.firstNonNilColor(colors: self.currentBadgeTextColors)
-                  let badgeFontSize = hasCustomBadgeSizing
-                    ? nil
-                    : Self.firstNonNilCGFloat(values: self.currentBadgeFontSizes)
-                  Self.applyBadgeStyle(to: ap, badgeBackground: badgeBackground, badgeText: badgeText, badgeFontSize: badgeFontSize)
+                Self.applyLabelStyle(to: ap, labelStyle: self.currentLabelStyle, tint: tintColor ?? bar.tintColor)
+                let hasCustomBadgeSizing =
+                  Self.hasAnyPositive(values: self.currentBadgeDotSizes) ||
+                  Self.hasAnyPositive(values: self.currentBadgeFontSizes)
+                let badgeBackground = Self.firstNonNilColor(colors: self.currentBadgeColors)
+                let badgeText = Self.firstNonNilColor(colors: self.currentBadgeTextColors)
+                let badgeFontSize = hasCustomBadgeSizing
+                  ? nil
+                  : Self.firstNonNilCGFloat(values: self.currentBadgeFontSizes)
+                Self.applyBadgeStyle(to: ap, badgeBackground: badgeBackground, badgeText: badgeText, badgeFontSize: badgeFontSize)
                 bar.standardAppearance = ap
                 if #available(iOS 15.0, *) { bar.scrollEdgeAppearance = ap }
               }
@@ -952,7 +955,8 @@ channel.setMethodCallHandler { [weak self] call, result in
             let allBars: [UITabBar] = [self.tabBar, self.tabBarLeft, self.tabBarRight].compactMap { $0 }
             for bar in allBars {
               let ap = UITabBarAppearance()
-              ap.configureWithTransparentBackground()
+              ap.configureWithDefaultBackground()
+      ap.backgroundColor = .clear
               ap.shadowColor = .clear
               ap.shadowImage = UIImage()
               Self.applyLabelStyle(to: ap, labelStyle: self.currentLabelStyle, tint: bar.tintColor)

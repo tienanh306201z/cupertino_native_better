@@ -1,4 +1,5 @@
 import 'package:flutter/widgets.dart';
+
 import 'sf_symbol.dart';
 
 /// Configuration for a search tab in [CNTabBar].
@@ -26,9 +27,9 @@ import 'sf_symbol.dart';
 /// )
 /// ```
 @immutable
-class CNTabBarSearchItem {
+class LiquidTabBarSearchItem {
   /// Creates a search tab configuration.
-  const CNTabBarSearchItem({
+  const LiquidTabBarSearchItem({
     this.icon,
     this.activeIcon,
     this.label = 'Search',
@@ -89,7 +90,7 @@ class CNTabBarSearchItem {
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
-    return other is CNTabBarSearchItem &&
+    return other is LiquidTabBarSearchItem &&
         other.icon == icon &&
         other.activeIcon == activeIcon &&
         other.label == label &&
@@ -99,14 +100,7 @@ class CNTabBarSearchItem {
   }
 
   @override
-  int get hashCode => Object.hash(
-    icon,
-    activeIcon,
-    label,
-    placeholder,
-    automaticallyActivatesSearch,
-    style,
-  );
+  int get hashCode => Object.hash(icon, activeIcon, label, placeholder, automaticallyActivatesSearch, style);
 }
 
 /// Visual styling options for the search tab in [CNTabBar].
@@ -270,7 +264,7 @@ class CNTabBarSearchStyle {
 ///   print('Search text: ${searchController.text}');
 /// });
 /// ```
-class CNTabBarSearchController extends ChangeNotifier {
+class LiquidTabBarSearchController extends ChangeNotifier {
   String _text = '';
   bool _isActive = false;
 
