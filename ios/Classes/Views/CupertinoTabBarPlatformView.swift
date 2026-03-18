@@ -275,8 +275,24 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
       let bar = tbc.tabBar
       bar.isTranslucent = true
       if self.forceCompactLayout { Self.forceCompactTraits(on: bar) } else { Self.clearTraitOverrides(on: bar) }
-      if #available(iOS 10.0, *), let tint = tint { bar.tintColor = tint }
+      // Resolve effective tint: label style activeColor takes priority over theme tint
+      let labelActiveColor = (self.currentLabelStyle?["activeColor"] as? NSNumber).map { Self.colorFromARGB($0.intValue) }
+      let labelColor = (self.currentLabelStyle?["color"] as? NSNumber).map { Self.colorFromARGB($0.intValue) }
+      let effectiveTint = labelActiveColor ?? tint
+      NSLog("🧭 [CN_TABBAR_INIT_SPLIT_COLORS] labelActiveColor=\(String(describing: labelActiveColor)) labelColor=\(String(describing: labelColor)) effectiveTint=\(String(describing: effectiveTint)) tint=\(String(describing: tint))")
+      // Set tintColor at every level — iOS 26 Liquid Glass may read it from
+      // different places depending on device/mode.
+      if let t = effectiveTint {
+        bar.tintColor = t
+        tbc.view.tintColor = t
+        container.tintColor = t
+      }
+      if let c = labelColor { bar.unselectedItemTintColor = c }
       if let ap = appearance { if #available(iOS 13.0, *) { bar.standardAppearance = ap; if #available(iOS 15.0, *) { bar.scrollEdgeAppearance = ap } } }
+      // Apply label style to items synchronously
+      if let vcs = tbc.viewControllers {
+        Self.applyLabelStyleToItems(vcs.map { $0.tabBarItem }, tabBar: bar, labelStyle: self.currentLabelStyle, tint: effectiveTint)
+      }
       // Set selection (skip action button indices)
       if selectedIndex >= 0 && selectedIndex < count - rightCount {
         tbc.selectedIndex = selectedIndex
@@ -526,6 +542,8 @@ channel.setMethodCallHandler { [weak self] call, result in
             if selectedIndex >= 0 && selectedIndex < count - self.rightCountVal {
               tbc.selectedIndex = selectedIndex
             }
+            // Apply label style directly to items for iPad inline layout
+            Self.applyLabelStyleToItems(vcs.map { $0.tabBarItem }, tabBar: tbc.tabBar, labelStyle: self.currentLabelStyle, tint: tbc.tabBar.tintColor)
             result(nil)
           } else if let bar = self.tabBar {
             bar.items = buildItems(0..<count)
@@ -690,10 +708,18 @@ channel.setMethodCallHandler { [weak self] call, result in
             let bar = tbc.tabBar
             bar.isTranslucent = true
             if self.forceCompactLayout { Self.forceCompactTraits(on: bar) } else { Self.clearTraitOverrides(on: bar) }
-            if let tint = (args["tint"] as? NSNumber).map({ Self.colorFromARGB($0.intValue) }) ?? bar.tintColor as UIColor? {
-              bar.tintColor = tint
-            }
+            let labelActiveColor = (self.currentLabelStyle?["activeColor"] as? NSNumber).map { Self.colorFromARGB($0.intValue) }
+            let labelColor = (self.currentLabelStyle?["color"] as? NSNumber).map { Self.colorFromARGB($0.intValue) }
+            let argsTint = (args["tint"] as? NSNumber).map { Self.colorFromARGB($0.intValue) }
+            let effectiveTint = labelActiveColor ?? argsTint ?? bar.tintColor
+            bar.tintColor = effectiveTint
+            tbc.view.tintColor = effectiveTint
+            self.container.tintColor = effectiveTint
+            if let c = labelColor { bar.unselectedItemTintColor = c }
             if let ap = appearance { if #available(iOS 13.0, *) { bar.standardAppearance = ap; if #available(iOS 15.0, *) { bar.scrollEdgeAppearance = ap } } }
+            if let vcs = tbc.viewControllers {
+              Self.applyLabelStyleToItems(vcs.map { $0.tabBarItem }, tabBar: bar, labelStyle: self.currentLabelStyle, tint: effectiveTint)
+            }
             if selectedIndex >= 0 && selectedIndex < count - rightCount {
               tbc.selectedIndex = selectedIndex
             }
@@ -773,12 +799,26 @@ channel.setMethodCallHandler { [weak self] call, result in
         } else { result(FlutterError(code: "bad_args", message: "Missing index", details: nil)) }
       case "setStyle":
         if let args = call.arguments as? [String: Any] {
+          NSLog("🧭 [CN_TABBAR_SET_STYLE] args=\(args) currentLabelStyle=\(String(describing: self.currentLabelStyle))")
           var tintColor: UIColor? = nil
           if let n = args["tint"] as? NSNumber {
             let c = Self.colorFromARGB(n.intValue)
             tintColor = c
-            if let bar = self.tabBar { bar.tintColor = c }
-            if let bar = self.splitTabBarController?.tabBar { bar.tintColor = c }
+            // Only set tintColor if the label style doesn't define activeColor,
+            // since activeColor should take priority for the selected tab color.
+            let labelActiveColor = (self.currentLabelStyle?["activeColor"] as? NSNumber).map { Self.colorFromARGB($0.intValue) }
+            let effectiveTint = labelActiveColor ?? c
+            if let bar = self.tabBar { bar.tintColor = effectiveTint }
+            if let tbc = self.splitTabBarController {
+              tbc.tabBar.tintColor = effectiveTint
+              tbc.view.tintColor = effectiveTint
+              self.container.tintColor = effectiveTint
+            }
+            // Also set unselectedItemTintColor if label style defines color
+            if let labelColor = (self.currentLabelStyle?["color"] as? NSNumber).map({ Self.colorFromARGB($0.intValue) }) {
+              self.tabBar?.unselectedItemTintColor = labelColor
+              self.splitTabBarController?.tabBar.unselectedItemTintColor = labelColor
+            }
           }
           let hasClearLabelStyle = (args["clearLabelStyle"] as? NSNumber)?.boolValue == true
           if let ls = args["labelStyle"] as? [String: Any] {
@@ -812,6 +852,13 @@ channel.setMethodCallHandler { [weak self] call, result in
               // UITabBarAppearance assignment can reset badge styling.
               self.applyCurrentBadgesToVisibleItems()
             }
+          }
+          // Apply label style directly to items for iPad inline layout compatibility
+          if let vcs = self.splitTabBarController?.viewControllers {
+            Self.applyLabelStyleToItems(vcs.map { $0.tabBarItem }, tabBar: self.splitTabBarController?.tabBar, labelStyle: self.currentLabelStyle, tint: tintColor ?? self.splitTabBarController?.tabBar.tintColor)
+          }
+          if let bar = self.tabBar, let items = bar.items {
+            Self.applyLabelStyleToItems(items, tabBar: bar, labelStyle: self.currentLabelStyle, tint: tintColor ?? bar.tintColor)
           }
           result(nil)
         } else { result(FlutterError(code: "bad_args", message: "Missing style", details: nil)) }
@@ -1174,6 +1221,115 @@ channel.setMethodCallHandler { [weak self] call, result in
     }
   }
 
+  /// Apply label style directly to each UITabBarItem and the tab bar itself.
+  /// On iPad in regular size class, UITabBarController ignores per-item text
+  /// attributes for colors — it uses tabBar.tintColor and
+  /// tabBar.unselectedItemTintColor instead. So we set both.
+  private static func applyLabelStyleToItems(_ items: [UITabBarItem], tabBar: UITabBar?, labelStyle: [String: Any]?, tint: UIColor?) {
+    NSLog("🧭 [CN_TABBAR_APPLY_LABEL_STYLE] labelStyle=\(String(describing: labelStyle)) tint=\(String(describing: tint)) tabBar.tintColor=\(String(describing: tabBar?.tintColor)) items=\(items.count)")
+    guard let ls = labelStyle else { return }
+    var normalAttrs: [NSAttributedString.Key: Any] = [:]
+    var selectedAttrs: [NSAttributedString.Key: Any] = [:]
+    let font = buildFont(from: ls)
+    if let font = font {
+      normalAttrs[.font] = font
+      selectedAttrs[.font] = font
+    }
+    if let colorVal = ls["color"] as? NSNumber {
+      let color = colorFromARGB(colorVal.intValue)
+      normalAttrs[.foregroundColor] = color
+      tabBar?.unselectedItemTintColor = color
+    }
+    if let activeColorVal = ls["activeColor"] as? NSNumber {
+      let color = colorFromARGB(activeColorVal.intValue)
+      selectedAttrs[.foregroundColor] = color
+      tabBar?.tintColor = color
+    } else if let tint = tint {
+      selectedAttrs[.foregroundColor] = tint
+    }
+    if let kern = ls["letterSpacing"] as? NSNumber {
+      normalAttrs[.kern] = CGFloat(truncating: kern)
+      selectedAttrs[.kern] = CGFloat(truncating: kern)
+    }
+    // On iPad with Liquid Glass, unselectedItemTintColor is ignored.
+    // Bake colors into item images using .alwaysOriginal so the system
+    // can't override them. Skip action button items (they have their own colors).
+    let normalColor = normalAttrs[.foregroundColor] as? UIColor
+    let selectedColor = selectedAttrs[.foregroundColor] as? UIColor
+    for item in items {
+      // Skip action button items — they use their own color property
+      if item.tag >= actionButtonTag { continue }
+      if let color = normalColor {
+        if let img = item.image {
+          item.image = img.withTintColor(color, renderingMode: .alwaysOriginal)
+        }
+        // Also set normal title color via attributed string for label
+        item.setTitleTextAttributes(normalAttrs, for: .normal)
+      } else if !normalAttrs.isEmpty {
+        item.setTitleTextAttributes(normalAttrs, for: .normal)
+      }
+      if let color = selectedColor {
+        if let img = item.selectedImage ?? item.image {
+          item.selectedImage = img.withTintColor(color, renderingMode: .alwaysOriginal)
+        }
+        item.setTitleTextAttributes(selectedAttrs, for: .selected)
+      } else if !selectedAttrs.isEmpty {
+        item.setTitleTextAttributes(selectedAttrs, for: .selected)
+      }
+    }
+    // Re-apply via UITabBarAppearance with fresh item appearances.
+    if #available(iOS 13.0, *), let tabBar = tabBar {
+      let ap = tabBar.standardAppearance.copy() as! UITabBarAppearance
+      let itemAppearance = UITabBarItemAppearance()
+      if let c = normalColor { itemAppearance.normal.iconColor = c }
+      if let c = selectedColor { itemAppearance.selected.iconColor = c }
+      if !normalAttrs.isEmpty { itemAppearance.normal.titleTextAttributes = normalAttrs }
+      if !selectedAttrs.isEmpty { itemAppearance.selected.titleTextAttributes = selectedAttrs }
+      ap.stackedLayoutAppearance = itemAppearance
+      ap.inlineLayoutAppearance = itemAppearance
+      ap.compactInlineLayoutAppearance = itemAppearance
+      tabBar.standardAppearance = ap
+      if #available(iOS 15.0, *) { tabBar.scrollEdgeAppearance = ap }
+    }
+    // On iPad Liquid Glass, label colors are only settable by directly
+    // modifying UILabel subviews inside the tab bar after layout.
+    if normalColor != nil || selectedColor != nil, let tabBar = tabBar {
+      DispatchQueue.main.async {
+        Self.applyColorsToTabBarSubviews(tabBar, normalColor: normalColor, selectedColor: selectedColor)
+      }
+    }
+  }
+
+  /// Walk the tab bar's view hierarchy and set colors directly on UILabel subviews.
+  /// This is the nuclear option for iPad Liquid Glass which ignores all standard APIs.
+  private static func applyColorsToTabBarSubviews(_ tabBar: UITabBar, normalColor: UIColor?, selectedColor: UIColor?) {
+    tabBar.layoutIfNeeded()
+    guard let items = tabBar.items else { return }
+    // Find tab bar button subviews (UITabBarButton or similar internal classes)
+    let buttons = tabBar.subviews.filter {
+      let cls = String(describing: type(of: $0))
+      return cls.contains("Button") || cls.contains("ItemView")
+    }.sorted { $0.frame.minX < $1.frame.minX }
+
+    for (i, button) in buttons.enumerated() {
+      let isSelected = i < items.count && items[i] === tabBar.selectedItem
+      // Skip action button items
+      if i < items.count && items[i].tag >= actionButtonTag { continue }
+      let color = isSelected ? selectedColor : normalColor
+      guard let color = color else { continue }
+      applyColorRecursively(to: button, color: color)
+    }
+  }
+
+  private static func applyColorRecursively(to view: UIView, color: UIColor) {
+    if let label = view as? UILabel {
+      label.textColor = color
+    }
+    for subview in view.subviews {
+      applyColorRecursively(to: subview, color: color)
+    }
+  }
+
   @available(iOS 13.0, *)
   private static func applyLabelStyle(to appearance: UITabBarAppearance, labelStyle: [String: Any]?, tint: UIColor?) {
     guard let ls = labelStyle else { return }
@@ -1184,28 +1340,25 @@ channel.setMethodCallHandler { [weak self] call, result in
       normalAttrs[.font] = font
       selectedAttrs[.font] = font
     }
-    if let colorVal = ls["color"] as? NSNumber {
-      normalAttrs[.foregroundColor] = colorFromARGB(colorVal.intValue)
-    }
-    if let activeColorVal = ls["activeColor"] as? NSNumber {
-      selectedAttrs[.foregroundColor] = colorFromARGB(activeColorVal.intValue)
-    } else if let tint = tint {
-      selectedAttrs[.foregroundColor] = tint
-    }
+    let normalColor: UIColor? = (ls["color"] as? NSNumber).map { colorFromARGB($0.intValue) }
+    let selectedColor: UIColor? = (ls["activeColor"] as? NSNumber).map { colorFromARGB($0.intValue) } ?? tint
+    if let c = normalColor { normalAttrs[.foregroundColor] = c }
+    if let c = selectedColor { selectedAttrs[.foregroundColor] = c }
     if let kern = ls["letterSpacing"] as? NSNumber {
       normalAttrs[.kern] = CGFloat(truncating: kern)
       selectedAttrs[.kern] = CGFloat(truncating: kern)
     }
-    if !normalAttrs.isEmpty {
-      appearance.stackedLayoutAppearance.normal.titleTextAttributes = normalAttrs
-      appearance.inlineLayoutAppearance.normal.titleTextAttributes = normalAttrs
-      appearance.compactInlineLayoutAppearance.normal.titleTextAttributes = normalAttrs
-    }
-    if !selectedAttrs.isEmpty {
-      appearance.stackedLayoutAppearance.selected.titleTextAttributes = selectedAttrs
-      appearance.inlineLayoutAppearance.selected.titleTextAttributes = selectedAttrs
-      appearance.compactInlineLayoutAppearance.selected.titleTextAttributes = selectedAttrs
-    }
+    // Create a fresh UITabBarItemAppearance and assign it to all layout modes.
+    // This is how native_glass_navbar does it — replacing the entire item
+    // appearance ensures iPad respects the colors in all rendering modes.
+    let itemAppearance = UITabBarItemAppearance()
+    if let c = normalColor { itemAppearance.normal.iconColor = c }
+    if let c = selectedColor { itemAppearance.selected.iconColor = c }
+    if !normalAttrs.isEmpty { itemAppearance.normal.titleTextAttributes = normalAttrs }
+    if !selectedAttrs.isEmpty { itemAppearance.selected.titleTextAttributes = selectedAttrs }
+    appearance.stackedLayoutAppearance = itemAppearance
+    appearance.inlineLayoutAppearance = itemAppearance
+    appearance.compactInlineLayoutAppearance = itemAppearance
   }
 
   private static func buildFont(from labelStyle: [String: Any]) -> UIFont? {

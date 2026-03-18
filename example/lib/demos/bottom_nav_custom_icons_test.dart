@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
 import 'package:cupertino_native_better/cupertino_native_better.dart';
 
 /// Bottom Navigation Test with Custom SVG Icons
@@ -49,9 +50,9 @@ class _BottomNavCustomIconsTestPageState extends State<BottomNavCustomIconsTestP
                   activeImageAsset: CNImageAsset('assets/icons/chat-filled.svg', size: _iconSize),
                 ),
               ],
-              forceCompactLayout: true,
+              forceCompactLayout: false,
               actionButton: LiquidTabBarActionButton(
-                icon: CNSymbol('plus.circle.fill', size: 24),
+                icon: CNSymbol('plus.circle.fill', size: 24, color: Colors.amber),
                 splitSpacing: 0,
                 onPressed: () {
                   showCupertinoDialog<void>(
@@ -63,6 +64,12 @@ class _BottomNavCustomIconsTestPageState extends State<BottomNavCustomIconsTestP
                     ),
                   );
                 },
+              ),
+              labelStyle: LiquidTabBarLabelStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: Colors.red,
+                activeColor: Colors.green,
               ),
               currentIndex: _currentIndex,
               onTap: (index) => setState(() => _currentIndex = index),
