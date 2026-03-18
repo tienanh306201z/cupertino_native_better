@@ -30,29 +30,29 @@ void main() {
 
 `LiquidGlassContainer` uses a **Platform View** (`UiKitView` / `AppKitView`) under the hood. While powerful, platform views are more expensive than standard Flutter widgets.
 
-*   **DO NOT** use `LiquidGlassContainer` inside long scrolling lists (`ListView.builder`, `GridView`) with many items. This will cause significant performance drops (jank).
-*   **DO** use `LiquidGlassContainer` for static elements like Cards, Headers, Navigation Bars, or Floating Action Buttons.
+- **DO NOT** use `LiquidGlassContainer` inside long scrolling lists (`ListView.builder`, `GridView`) with many items. This will cause significant performance drops (jank).
+- **DO** use `LiquidGlassContainer` for static elements like Cards, Headers, Navigation Bars, or Floating Action Buttons.
 
 ## Why cupertino_native_better?
 
 ### Comparison with Other Packages
 
-| Feature | cupertino_native_better | cupertino_native_plus | cupertino_native |
-|---------|:-----------------------:|:---------------------:|:----------------:|
-| iOS 26+ Liquid Glass | **Yes** | Yes | No |
-| Release Build Version Detection | **Fixed** | Broken | N/A |
-| SF Symbol Fallback (iOS < 26) | **CNIcon renders natively** | Placeholder icons | N/A |
-| Button Label + Icon Fallback | **Both render correctly** | Label disappears | N/A |
-| Tab Bar Icon Fallback | **CNIcon renders natively** | Empty circles | N/A |
-| Image Asset Support (PNG/SVG) | **Full support** | Partial | No |
-| Automatic Asset Resolution | **Yes (1x-4x)** | No | No |
-| Dark Mode Sync | **Automatic** | Manual | Manual |
-| Glass Effect Unioning | **Yes** | Yes | No |
-| macOS Support | **Yes** | Yes | Yes |
+| Feature                         |   cupertino_native_better   | cupertino_native_plus | cupertino_native |
+| ------------------------------- | :-------------------------: | :-------------------: | :--------------: |
+| iOS 26+ Liquid Glass            |           **Yes**           |          Yes          |        No        |
+| Release Build Version Detection |          **Fixed**          |        Broken         |       N/A        |
+| SF Symbol Fallback (iOS < 26)   | **CNIcon renders natively** |   Placeholder icons   |       N/A        |
+| Button Label + Icon Fallback    |  **Both render correctly**  |   Label disappears    |       N/A        |
+| Tab Bar Icon Fallback           | **CNIcon renders natively** |     Empty circles     |       N/A        |
+| Image Asset Support (PNG/SVG)   |      **Full support**       |        Partial        |        No        |
+| Automatic Asset Resolution      |       **Yes (1x-4x)**       |          No           |        No        |
+| Dark Mode Sync                  |        **Automatic**        |        Manual         |      Manual      |
+| Glass Effect Unioning           |           **Yes**           |          Yes          |        No        |
+| macOS Support                   |           **Yes**           |          Yes          |       Yes        |
 
 ### The Problem with Other Packages
 
-**cupertino_native_plus** has a critical bug: it uses platform channels to detect iOS versions, which fails with *"Null check operator used on a null value"* in release builds. This causes:
+**cupertino_native_plus** has a critical bug: it uses platform channels to detect iOS versions, which fails with _"Null check operator used on a null value"_ in release builds. This causes:
 
 - `shouldUseNativeGlass` returns `false` even on iOS 26+
 - Falls back to old Cupertino widgets incorrectly
@@ -79,22 +79,22 @@ This approach works reliably in **both debug and release builds**.
 
 ### Widgets
 
-| Widget | Description | Controller |
-|--------|-------------|:----------:|
-| `CNButton` | Native push button with Liquid Glass effects, SF Symbols, and image assets | - |
-| `CNButton.icon` | Circular icon-only button variant | - |
-| `CNIcon` | Platform-rendered SF Symbols, custom IconData, or image assets | - |
-| `CNTabBar` | Native tab bar with split mode for scroll-aware layouts | - |
-| `CNSlider` | Native slider with min/max range and step support | `CNSliderController` |
-| `CNSwitch` | Native toggle switch with animated state changes | `CNSwitchController` |
-| `CNPopupMenuButton` | Native popup menu with dividers, icons, and image assets | - |
-| `CNPopupMenuButton.icon` | Circular icon-only popup menu variant | - |
-| `CNSegmentedControl` | Native segmented control with SF Symbols support | - |
-| `CNGlassButtonGroup` | Grouped buttons with unified glass blending (tint color support) | - |
-| `LiquidGlassContainer` | Apply Liquid Glass effects to any Flutter widget | - |
-| `CNGlassCard` | **(Experimental)** Pre-styled card with optional breathing glow animation | - |
-| `CNTabBarNative` | **iOS 26 Native Tab Bar** with UITabBarController + search | - |
-| `CNToast` | Toast notifications with Liquid Glass effects | - |
+| Widget                   | Description                                                                |      Controller      |
+| ------------------------ | -------------------------------------------------------------------------- | :------------------: |
+| `CNButton`               | Native push button with Liquid Glass effects, SF Symbols, and image assets |          -           |
+| `CNButton.icon`          | Circular icon-only button variant                                          |          -           |
+| `CNIcon`                 | Platform-rendered SF Symbols, custom IconData, or image assets             |          -           |
+| `CNTabBar`               | Native tab bar with optional trailing action button                        |          -           |
+| `CNSlider`               | Native slider with min/max range and step support                          | `CNSliderController` |
+| `CNSwitch`               | Native toggle switch with animated state changes                           | `CNSwitchController` |
+| `CNPopupMenuButton`      | Native popup menu with dividers, icons, and image assets                   |          -           |
+| `CNPopupMenuButton.icon` | Circular icon-only popup menu variant                                      |          -           |
+| `CNSegmentedControl`     | Native segmented control with SF Symbols support                           |          -           |
+| `CNGlassButtonGroup`     | Grouped buttons with unified glass blending (tint color support)           |          -           |
+| `LiquidGlassContainer`   | Apply Liquid Glass effects to any Flutter widget                           |          -           |
+| `CNGlassCard`            | **(Experimental)** Pre-styled card with optional breathing glow animation  |          -           |
+| `CNTabBarNative`         | **iOS 26 Native Tab Bar** with UITabBarController + search                 |          -           |
+| `CNToast`                | Toast notifications with Liquid Glass effects                              |          -           |
 
 ### Icon Support
 
@@ -167,7 +167,7 @@ Row(
 )
 ```
 
-### Tab Bar with Split Mode
+### Tab Bar with Action Button
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/gunumdogdu/cupertino_native_better/main/misc/screenshots/tab_bar_preview.png" width="300" alt="Tab Bar Preview"/>
@@ -190,8 +190,13 @@ CNTabBar(
   currentIndex: _selectedIndex,
   onTap: (index) => setState(() => _selectedIndex = index),
   iconSize: 25, // Optional: customize icon size (default ~25pt)
-  split: true, // Separates tabs when scrolling
-  rightCount: 1, // Number of tabs pinned to the right
+  actionButton: LiquidTabBarActionButton(
+    icon: CNSymbol('plus.circle.fill'),
+    splitSpacing: 12,
+    onPressed: () {
+      // Handle action tap (does not change selected tab)
+    },
+  ),
 )
 ```
 
@@ -281,7 +286,7 @@ Add to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  cupertino_native_better: ^1.3.1
+    cupertino_native_better: ^1.3.1
 ```
 
 ## Usage
@@ -503,13 +508,13 @@ CNGlassCard(
 
 ## Platform Fallbacks
 
-| Platform | Liquid Glass | SF Symbols | Other Widgets |
-|----------|:------------:|:----------:|:-------------:|
-| iOS 26+ | Native | Native | Native |
-| iOS 13-25 | CupertinoButton | Native via CNIcon | CupertinoWidgets |
-| macOS 26+ | Native | Native | Native |
-| macOS 11-25 | CupertinoButton | Native via CNIcon | CupertinoWidgets |
-| Android/Web/etc | Material fallback | Flutter Icon | Material fallback |
+| Platform        |   Liquid Glass    |    SF Symbols     |   Other Widgets   |
+| --------------- | :---------------: | :---------------: | :---------------: |
+| iOS 26+         |      Native       |      Native       |      Native       |
+| iOS 13-25       |  CupertinoButton  | Native via CNIcon | CupertinoWidgets  |
+| macOS 26+       |      Native       |      Native       |      Native       |
+| macOS 11-25     |  CupertinoButton  | Native via CNIcon | CupertinoWidgets  |
+| Android/Web/etc | Material fallback |   Flutter Icon    | Material fallback |
 
 ## Version Detection
 
@@ -541,22 +546,24 @@ print('macOS version: ${PlatformVersion.macOSVersion}');
 ## Migration from cupertino_native_plus
 
 1. Update your `pubspec.yaml`:
-   ```yaml
-   # Before
-   cupertino_native_plus: ^x.x.x
 
-   # After
-   cupertino_native_better: ^1.3.1
-   ```
+    ```yaml
+    # Before
+    cupertino_native_plus: ^x.x.x
+
+    # After
+    cupertino_native_better: ^1.3.1
+    ```
 
 2. Update imports:
-   ```dart
-   // Before
-   import 'package:cupertino_native_plus/cupertino_native_plus.dart';
 
-   // After
-   import 'package:cupertino_native_better/cupertino_native_better.dart';
-   ```
+    ```dart
+    // Before
+    import 'package:cupertino_native_plus/cupertino_native_plus.dart';
+
+    // After
+    import 'package:cupertino_native_better/cupertino_native_better.dart';
+    ```
 
 3. No other code changes needed - API is fully compatible!
 
@@ -573,6 +580,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 ## Credits
 
 This package is based on:
+
 - [cupertino_native_plus](https://pub.dev/packages/cupertino_native_plus) by NarekManukyan
 - [cupertino_native](https://pub.dev/packages/cupertino_native) by Serverpod
 

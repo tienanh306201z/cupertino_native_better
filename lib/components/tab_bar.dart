@@ -41,6 +41,28 @@ class LiquidTabBarItem {
   final EdgeInsets? padding;
 }
 
+class LiquidTabBarActionButton {
+  const LiquidTabBarActionButton({
+    required this.onPressed,
+    this.label = '',
+    this.icon,
+    this.customIcon,
+    this.imageAsset,
+    this.padding,
+    this.splitSpacing = 12.0,
+  });
+
+  final VoidCallback onPressed;
+  final String label;
+  final CNSymbol? icon;
+  final IconData? customIcon;
+  final CNImageAsset? imageAsset;
+  final EdgeInsets? padding;
+
+  /// Gap between the main tab group and the action button when split.
+  final double splitSpacing;
+}
+
 class LiquidTabBar extends StatefulWidget {
   const LiquidTabBar({
     super.key,
@@ -48,17 +70,14 @@ class LiquidTabBar extends StatefulWidget {
     required this.currentIndex,
     required this.onTap,
     this.height,
-    this.split = false,
-    this.rightCount = 1,
-    this.splitSpacing = 12.0,
+    this.actionButton,
     this.iconAboveLabel = true,
     this.searchItem,
     this.labelStyle,
     this.searchController,
   }) : assert(items.length >= 2, 'Tab bar must have at least 2 items'),
-       assert(items.length <= 5, 'Tab bar should have 5 or fewer items for optimal usability'),
-       assert(rightCount >= 1, 'Right count must be at least 1'),
-       assert(rightCount < items.length || searchItem != null, 'Right count must be less than total items');
+       assert(items.length + (actionButton != null ? 1 : 0) <= 5, 'Tab bar should have 5 or fewer items for optimal usability'),
+       assert(actionButton == null || searchItem == null, 'Action button cannot be used together with search item');
 
   /// Items to display in the tab bar.
   final List<LiquidTabBarItem> items;
@@ -72,14 +91,10 @@ class LiquidTabBar extends StatefulWidget {
   /// Fixed height; if null uses intrinsic height reported by native view.
   final double? height;
 
-  /// When true, splits items between left and right sections.
-  final bool split;
-
-  /// How many trailing items to pin right when [split] is true.
-  final int rightCount;
-
-  /// Gap between left/right halves when split.
-  final double splitSpacing;
+  /// Optional trailing action button.
+  ///
+  /// This button does not change [currentIndex] and only triggers [onPressed].
+  final LiquidTabBarActionButton? actionButton;
 
   /// Whether to force icon-above-label layout on iPad.
   final bool iconAboveLabel;
@@ -122,6 +137,28 @@ class _LiquidTabBarState extends State<LiquidTabBar> {
 
   // Whether search mode is enabled
   bool get _hasSearch => widget.searchItem != null;
+
+  bool get _usesSplitLayout => widget.actionButton != null;
+  int get _layoutRightCount => _usesSplitLayout ? 1 : 1;
+  double get _layoutSplitSpacing => widget.actionButton?.splitSpacing ?? 0.0;
+
+  List<LiquidTabBarItem> get _platformItems {
+    final action = widget.actionButton;
+    if (action == null) return widget.items;
+    return [
+      ...widget.items,
+      LiquidTabBarItem(
+        label: action.label,
+        icon: action.icon,
+        activeIcon: action.icon,
+        customIcon: action.customIcon,
+        activeCustomIcon: action.customIcon,
+        imageAsset: action.imageAsset,
+        activeImageAsset: action.imageAsset,
+        padding: action.padding,
+      ),
+    ];
+  }
 
   Future<Map<String, dynamic>?>? _creationParamsFuture;
 
@@ -193,16 +230,16 @@ class _LiquidTabBarState extends State<LiquidTabBar> {
     try {
       final availableWidth = MediaQuery.of(context).size.width;
       await ch.invokeMethod('setLayout', {
-        'split': widget.split,
-        'rightCount': widget.rightCount,
-        'splitSpacing': widget.splitSpacing,
+        'split': _usesSplitLayout,
+        'rightCount': _layoutRightCount,
+        'splitSpacing': _layoutSplitSpacing,
         'iconAboveLabel': widget.iconAboveLabel,
         'availableWidth': availableWidth,
         'selectedIndex': widget.currentIndex,
       });
-      _lastSplit = widget.split;
-      _lastRightCount = widget.rightCount;
-      _lastSplitSpacing = widget.splitSpacing;
+      _lastSplit = _usesSplitLayout;
+      _lastRightCount = _layoutRightCount;
+      _lastSplitSpacing = _layoutSplitSpacing;
       _lastIconAboveLabel = widget.iconAboveLabel;
       _requestIntrinsicSize();
     } catch (_) {
@@ -237,11 +274,11 @@ class _LiquidTabBarState extends State<LiquidTabBar> {
     }
   }
 
-  Future<List<List<Uint8List?>>> _renderCustomIcons() async {
+  Future<List<List<Uint8List?>>> _renderCustomIcons(List<LiquidTabBarItem> platformItems) async {
     final customIconBytes = <Uint8List?>[];
     final activeCustomIconBytes = <Uint8List?>[];
 
-    for (final item in widget.items) {
+    for (final item in platformItems) {
       // Priority: imageAsset > customIcon > icon
       if (item.imageAsset != null) {
         // For imageAsset, we don't need to render to bytes - native code will handle it
@@ -271,6 +308,7 @@ class _LiquidTabBarState extends State<LiquidTabBar> {
   }
 
   Future<Map<String, dynamic>?> _buildCreationParams() async {
+    final platformItems = _platformItems;
     // Capture ALL context-derived values synchronously before any async gaps.
     // Using context after an await is unsafe — the widget may have rebuilt or been
     // removed from the tree by then, causing stale/missing theme values in release.
@@ -279,45 +317,45 @@ class _LiquidTabBarState extends State<LiquidTabBar> {
     final capturedStyle = encodeStyle(context, tint: _themeTint);
     final capturedSearchStyle = _hasSearch ? _buildSearchStyleParams(context) : null;
     final capturedLabelStyle = _buildLabelStyleParams(context);
-    final labels = widget.items.map((e) => e.label ?? '').toList();
-    final symbols = widget.items.map((e) => e.icon?.name ?? '').toList();
-    final activeSymbols = widget.items.map((e) => e.activeIcon?.name ?? e.icon?.name ?? '').toList();
-    final badges = widget.items.map((e) => _encodeBadge(e.badge)).toList();
-    final badgeColors = widget.items.map((e) => resolveColorToArgb(e.badgeColor, context)).toList();
-    final badgeTextColors = widget.items.map((e) => resolveColorToArgb(e.badgeTextColor, context)).toList();
-    final badgeDotSizes = widget.items.map((e) => e.badgeDotSize).toList();
-    final badgeFontSizes = widget.items.map((e) => e.badgeFontSize).toList();
-    final sizes = widget.items.map((e) => e.icon?.size ?? e.imageAsset?.size).toList();
-    final colors = widget.items.map((e) => resolveColorToArgb(e.icon?.color ?? e.imageAsset?.color, context)).toList();
-    final activeColors = widget.items
+    final labels = platformItems.map((e) => e.label ?? '').toList();
+    final symbols = platformItems.map((e) => e.icon?.name ?? '').toList();
+    final activeSymbols = platformItems.map((e) => e.activeIcon?.name ?? e.icon?.name ?? '').toList();
+    final badges = platformItems.map((e) => _encodeBadge(e.badge)).toList();
+    final badgeColors = platformItems.map((e) => resolveColorToArgb(e.badgeColor, context)).toList();
+    final badgeTextColors = platformItems.map((e) => resolveColorToArgb(e.badgeTextColor, context)).toList();
+    final badgeDotSizes = platformItems.map((e) => e.badgeDotSize).toList();
+    final badgeFontSizes = platformItems.map((e) => e.badgeFontSize).toList();
+    final sizes = platformItems.map((e) => e.icon?.size ?? e.imageAsset?.size).toList();
+    final colors = platformItems.map((e) => resolveColorToArgb(e.icon?.color ?? e.imageAsset?.color, context)).toList();
+    final activeColors = platformItems
         .map((e) => resolveColorToArgb(e.activeIcon?.color ?? e.activeImageAsset?.color ?? e.icon?.color ?? e.imageAsset?.color, context))
         .toList();
-    final itemPaddings = widget.items.map((e) {
+    final itemPaddings = platformItems.map((e) {
       final p = e.padding;
       if (p == null) return null;
       return [p.top, p.left, p.bottom, p.right];
     }).toList();
-    final imageAssetData = widget.items.map((e) => e.imageAsset?.imageData).toList();
-    final activeImageAssetData = widget.items.map((e) => e.activeImageAsset?.imageData).toList();
+    final imageAssetData = platformItems.map((e) => e.imageAsset?.imageData).toList();
+    final activeImageAssetData = platformItems.map((e) => e.activeImageAsset?.imageData).toList();
 
     // Async work begins here — context must not be used below this line.
-    final iconBytes = await _renderCustomIcons();
+    final iconBytes = await _renderCustomIcons(platformItems);
     if (!mounted) return null;
     final customIconBytes = iconBytes[0];
     final activeCustomIconBytes = iconBytes[1];
 
     // Extract imageAsset data and resolve asset paths based on device pixel ratio
     final imageAssetPaths = await Future.wait(
-      widget.items.map((e) async => e.imageAsset != null ? await resolveAssetPathForPixelRatio(e.imageAsset!.assetPath) : ''),
+      platformItems.map((e) async => e.imageAsset != null ? await resolveAssetPathForPixelRatio(e.imageAsset!.assetPath) : ''),
     );
     final activeImageAssetPaths = await Future.wait(
-      widget.items.map((e) async => e.activeImageAsset != null ? await resolveAssetPathForPixelRatio(e.activeImageAsset!.assetPath) : ''),
+      platformItems.map((e) async => e.activeImageAsset != null ? await resolveAssetPathForPixelRatio(e.activeImageAsset!.assetPath) : ''),
     );
 
     if (!mounted) return null;
     // Auto-detect format if not provided (use resolved paths)
     final imageAssetFormats = await Future.wait(
-      widget.items.asMap().entries.map((entry) async {
+      platformItems.asMap().entries.map((entry) async {
         final e = entry.value;
         if (e.imageAsset == null) return '';
         final resolvedPath = imageAssetPaths[entry.key];
@@ -325,7 +363,7 @@ class _LiquidTabBarState extends State<LiquidTabBar> {
       }),
     );
     final activeImageAssetFormats = await Future.wait(
-      widget.items.asMap().entries.map((entry) async {
+      platformItems.asMap().entries.map((entry) async {
         final e = entry.value;
         if (e.activeImageAsset == null) return '';
         final resolvedPath = activeImageAssetPaths[entry.key];
@@ -359,9 +397,9 @@ class _LiquidTabBarState extends State<LiquidTabBar> {
       'itemPaddings': itemPaddings,
       'selectedIndex': 0,
       'isDark': capturedIsDark,
-      'split': _hasSearch ? true : widget.split,
-      'rightCount': widget.rightCount,
-      'splitSpacing': widget.splitSpacing,
+      'split': _usesSplitLayout,
+      'rightCount': _layoutRightCount,
+      'splitSpacing': _layoutSplitSpacing,
       'iconAboveLabel': widget.iconAboveLabel,
       'style': capturedStyle,
       // Label style configuration
@@ -456,9 +494,9 @@ class _LiquidTabBarState extends State<LiquidTabBar> {
     _lastIsDark = _isDark;
     _requestIntrinsicSize();
     _cacheItems();
-    _lastSplit = widget.split;
-    _lastRightCount = widget.rightCount;
-    _lastSplitSpacing = widget.splitSpacing;
+    _lastSplit = _usesSplitLayout;
+    _lastRightCount = _layoutRightCount;
+    _lastSplitSpacing = _layoutSplitSpacing;
     _lastIconAboveLabel = widget.iconAboveLabel;
     _lastLabelStyleKey = _labelStyleKey();
 
@@ -495,6 +533,18 @@ class _LiquidTabBarState extends State<LiquidTabBar> {
       final args = call.arguments as Map?;
       final idx = (args?['index'] as num?)?.toInt();
       if (idx != null) {
+        if (widget.actionButton != null && idx == widget.items.length) {
+          widget.actionButton?.onPressed();
+          final ch = _channel;
+          if (ch != null) {
+            try {
+              ch.invokeMethod('setSelectedIndex', {'index': widget.currentIndex});
+            } catch (_) {
+              // Ignore MissingPluginException during hot reload or view recreation
+            }
+          }
+          return null;
+        }
         // Always fire onTap, even for reselects (Issue #13 fix)
         widget.onTap(idx);
         _lastIndex = idx;
@@ -551,14 +601,15 @@ class _LiquidTabBarState extends State<LiquidTabBar> {
       }
 
       // Items update (for hot reload or dynamic changes)
-      final labels = widget.items.map((e) => e.label ?? '').toList();
-      final symbols = widget.items.map((e) => e.icon?.name ?? '').toList();
-      final activeSymbols = widget.items.map((e) => e.activeIcon?.name ?? e.icon?.name ?? '').toList();
-      final badges = widget.items.map((e) => _encodeBadge(e.badge)).toList();
-      final badgeColors = widget.items.map((e) => resolveColorToArgb(e.badgeColor, context)).toList();
-      final badgeTextColors = widget.items.map((e) => resolveColorToArgb(e.badgeTextColor, context)).toList();
-      final badgeDotSizes = widget.items.map((e) => e.badgeDotSize).toList();
-      final badgeFontSizes = widget.items.map((e) => e.badgeFontSize).toList();
+      final platformItems = _platformItems;
+      final labels = platformItems.map((e) => e.label ?? '').toList();
+      final symbols = platformItems.map((e) => e.icon?.name ?? '').toList();
+      final activeSymbols = platformItems.map((e) => e.activeIcon?.name ?? e.icon?.name ?? '').toList();
+      final badges = platformItems.map((e) => _encodeBadge(e.badge)).toList();
+      final badgeColors = platformItems.map((e) => resolveColorToArgb(e.badgeColor, context)).toList();
+      final badgeTextColors = platformItems.map((e) => resolveColorToArgb(e.badgeTextColor, context)).toList();
+      final badgeDotSizes = platformItems.map((e) => e.badgeDotSize).toList();
+      final badgeFontSizes = platformItems.map((e) => e.badgeFontSize).toList();
 
       // Compute comprehensive fingerprint covering ALL item properties
       final currentFingerprint = _itemsFingerprint();
@@ -586,32 +637,32 @@ class _LiquidTabBarState extends State<LiquidTabBar> {
       }
 
       if (itemsChanged) {
-        final colors = widget.items.map((e) => resolveColorToArgb(e.icon?.color ?? e.imageAsset?.color, context)).toList();
-        final activeColors = widget.items
+        final colors = platformItems.map((e) => resolveColorToArgb(e.icon?.color ?? e.imageAsset?.color, context)).toList();
+        final activeColors = platformItems
             .map((e) => resolveColorToArgb(e.activeIcon?.color ?? e.activeImageAsset?.color ?? e.icon?.color ?? e.imageAsset?.color, context))
             .toList();
 
         // Re-render custom icons if items changed
-        final iconBytes = await _renderCustomIcons();
+        final iconBytes = await _renderCustomIcons(platformItems);
         if (!mounted) return;
 
         final customIconBytes = iconBytes[0];
         final activeCustomIconBytes = iconBytes[1];
 
         // Extract imageAsset properties
-        final imageAssetPaths = widget.items.map((e) => e.imageAsset?.assetPath ?? '').toList();
-        final activeImageAssetPaths = widget.items.map((e) => e.activeImageAsset?.assetPath ?? '').toList();
-        final imageAssetData = widget.items.map((e) => e.imageAsset?.imageData).toList();
-        final activeImageAssetData = widget.items.map((e) => e.activeImageAsset?.imageData).toList();
+        final imageAssetPaths = platformItems.map((e) => e.imageAsset?.assetPath ?? '').toList();
+        final activeImageAssetPaths = platformItems.map((e) => e.activeImageAsset?.assetPath ?? '').toList();
+        final imageAssetData = platformItems.map((e) => e.imageAsset?.imageData).toList();
+        final activeImageAssetData = platformItems.map((e) => e.activeImageAsset?.imageData).toList();
         // Auto-detect format if not provided
-        final imageAssetFormats = widget.items
+        final imageAssetFormats = platformItems
             .map((e) => e.imageAsset?.imageFormat ?? detectImageFormat(e.imageAsset?.assetPath, e.imageAsset?.imageData) ?? '')
             .toList();
-        final activeImageAssetFormats = widget.items
+        final activeImageAssetFormats = platformItems
             .map((e) => e.activeImageAsset?.imageFormat ?? detectImageFormat(e.activeImageAsset?.assetPath, e.activeImageAsset?.imageData) ?? '')
             .toList();
 
-        final sizes = widget.items.map((e) => e.icon?.size ?? e.imageAsset?.size).toList();
+        final sizes = platformItems.map((e) => e.icon?.size ?? e.imageAsset?.size).toList();
 
         await ch.invokeMethod('setItems', {
           'labels': labels,
@@ -642,22 +693,22 @@ class _LiquidTabBarState extends State<LiquidTabBar> {
         _requestIntrinsicSize();
       }
 
-      // Layout updates (split / insets)
-      if (_lastSplit != widget.split ||
-          _lastRightCount != widget.rightCount ||
-          _lastSplitSpacing != widget.splitSpacing ||
+      // Layout updates
+      if (_lastSplit != _usesSplitLayout ||
+          _lastRightCount != _layoutRightCount ||
+          _lastSplitSpacing != _layoutSplitSpacing ||
           _lastIconAboveLabel != widget.iconAboveLabel) {
         await ch.invokeMethod('setLayout', {
-          'split': widget.split,
-          'rightCount': widget.rightCount,
-          'splitSpacing': widget.splitSpacing,
+          'split': _usesSplitLayout,
+          'rightCount': _layoutRightCount,
+          'splitSpacing': _layoutSplitSpacing,
           'iconAboveLabel': widget.iconAboveLabel,
           'availableWidth': availableWidth,
           'selectedIndex': widget.currentIndex,
         });
-        _lastSplit = widget.split;
-        _lastRightCount = widget.rightCount;
-        _lastSplitSpacing = widget.splitSpacing;
+        _lastSplit = _usesSplitLayout;
+        _lastRightCount = _layoutRightCount;
+        _lastSplitSpacing = _layoutSplitSpacing;
         _lastIconAboveLabel = widget.iconAboveLabel;
         _requestIntrinsicSize();
       }
@@ -713,7 +764,7 @@ class _LiquidTabBarState extends State<LiquidTabBar> {
   /// This ensures any change — imageAssets, icon colors (theme), badge colors,
   /// custom icons, padding — triggers a native update.
   String _itemsFingerprint() {
-    return widget.items
+    return _platformItems
         .map((e) {
           // Context-resolved colors are needed for theme sensitivity
           final iconColor = resolveColorToArgb(e.icon?.color ?? e.imageAsset?.color, context);
@@ -746,7 +797,7 @@ class _LiquidTabBarState extends State<LiquidTabBar> {
 
   /// Fingerprint for badges only (used in the fast badges-only update path).
   String _badgesFingerprint() {
-    return widget.items
+    return _platformItems
         .map(
           (e) => [
             _encodeBadge(e.badge),

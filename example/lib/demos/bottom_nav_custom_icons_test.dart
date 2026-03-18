@@ -29,27 +29,40 @@ class _BottomNavCustomIconsTestPageState extends State<BottomNavCustomIconsTestP
             child: LiquidTabBar(
               items: [
                 LiquidTabBarItem(
-                  label: 'Home',
+                  label: 'Thư viện',
                   imageAsset: CNImageAsset('assets/icons/home.svg', size: _iconSize),
                   activeImageAsset: CNImageAsset('assets/icons/home_filled.svg', size: _iconSize),
                 ),
                 LiquidTabBarItem(
-                  label: 'Search',
+                  label: 'Cá nhân',
                   imageAsset: CNImageAsset('assets/icons/search.svg', size: _iconSize),
                   activeImageAsset: CNImageAsset('assets/icons/search-filled.svg', size: _iconSize),
                 ),
                 LiquidTabBarItem(
-                  label: 'Chat',
+                  label: 'Cộng đồng',
                   imageAsset: CNImageAsset('assets/icons/chat.svg', size: _iconSize),
                   activeImageAsset: CNImageAsset('assets/icons/chat-filled.svg', size: _iconSize),
                 ),
                 LiquidTabBarItem(
+                  label: 'Hành trình',
                   imageAsset: CNImageAsset('assets/icons/profile.svg', size: _iconSize),
                   activeImageAsset: CNImageAsset('assets/icons/profile-filled.svg', size: _iconSize),
                 ),
               ],
-              split: true,
-              splitSpacing: 0,
+              actionButton: LiquidTabBarActionButton(
+                icon: CNSymbol('plus.circle.fill', size: 24),
+                splitSpacing: 0,
+                onPressed: () {
+                  showCupertinoDialog<void>(
+                    context: context,
+                    builder: (_) => CupertinoAlertDialog(
+                      title: const Text('Action'),
+                      content: const Text('Action button pressed'),
+                      actions: [CupertinoDialogAction(onPressed: () => Navigator.of(context).pop(), child: const Text('OK'))],
+                    ),
+                  );
+                },
+              ),
               currentIndex: _currentIndex,
               onTap: (index) => setState(() => _currentIndex = index),
             ),

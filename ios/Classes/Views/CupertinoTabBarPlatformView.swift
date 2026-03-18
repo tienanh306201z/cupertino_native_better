@@ -256,8 +256,19 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
       }
       left.layer.shadowOpacity = 0; right.layer.shadowOpacity = 0
       left.delegate = self; right.delegate = self
-      left.itemPositioning = .centered; right.itemPositioning = .centered
-      left.itemSpacing = 8; right.itemSpacing = 8
+      if UIDevice.current.userInterfaceIdiom == .pad {
+        // On iPad, prefer filling each split container so long labels can use
+        // available horizontal room instead of staying tightly content-centered.
+        left.itemPositioning = .fill
+        right.itemPositioning = .fill
+        left.itemSpacing = 0
+        right.itemSpacing = 0
+      } else {
+        left.itemPositioning = .centered
+        right.itemPositioning = .centered
+        left.itemSpacing = 8
+        right.itemSpacing = 8
+      }
       if #available(iOS 10.0, *), let tint = tint { left.tintColor = tint; right.tintColor = tint }
       if let ap = appearance { if #available(iOS 13.0, *) { left.standardAppearance = ap; right.standardAppearance = ap; if #available(iOS 15.0, *) { left.scrollEdgeAppearance = ap; right.scrollEdgeAppearance = ap } } }
       if self.iconAboveLabel { Self.forceStackedLayout(on: left); Self.forceStackedLayout(on: right) } else { Self.forceInlineLayout(on: left); Self.forceInlineLayout(on: right) }
@@ -296,13 +307,30 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
       let leftWidth = leftFittedInvalid ? leftFallbackWidth : max(leftFittedWidth, leftFallbackWidth)
       let rightWidth = rightFittedInvalid ? rightFallbackWidth : max(rightFittedWidth, rightFallbackWidth)
 
-      let adjustedRightWidth = rightWidth
+      let shouldUseCircularRightPanel = rightCount == 1
+      let rightPanelDiameter = max(
+        1,
+        right.sizeThatFits(
+          CGSize(
+            width: CGFloat.greatestFiniteMagnitude,
+            height: CGFloat.greatestFiniteMagnitude
+          )
+        ).height
+      )
+
+      let adjustedRightWidth = shouldUseCircularRightPanel ? rightPanelDiameter : rightWidth
       let adjustedLeftWidth = leftWidth
       let adjustedTotal = adjustedLeftWidth + adjustedRightWidth + spacing
       var resolvedLeftWidth = adjustedLeftWidth
       var resolvedRightWidth = adjustedRightWidth
       let shouldScaleDown = adjustedTotal > availableWidth
-      if shouldScaleDown {
+      let shouldExpandForIPadLabels = self.iconAboveLabel && UIDevice.current.userInterfaceIdiom == .pad
+      if shouldUseCircularRightPanel {
+        resolvedRightWidth = rightPanelDiameter
+        if shouldScaleDown {
+          resolvedLeftWidth = max(0, availableWidth - spacing - resolvedRightWidth)
+        }
+      } else if shouldScaleDown || shouldExpandForIPadLabels {
         let usable = max(0, availableWidth - spacing)
         let totalItems = max(1, count)
         let leftFraction = CGFloat(count - rightCount) / CGFloat(totalItems)
@@ -315,18 +343,38 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
 
       // Always center both panels as one group to avoid hot-reload drift.
       let halfTotal = (resolvedLeftWidth + spacing + resolvedRightWidth) / 2
-      self.activeSplitConstraints = [
+      var splitConstraints: [NSLayoutConstraint] = [
         left.leadingAnchor.constraint(equalTo: container.centerXAnchor, constant: -halfTotal),
         left.widthAnchor.constraint(equalToConstant: resolvedLeftWidth),
         left.topAnchor.constraint(equalTo: container.topAnchor),
         left.bottomAnchor.constraint(equalTo: container.bottomAnchor),
 
         right.leadingAnchor.constraint(equalTo: left.trailingAnchor, constant: spacing),
-        right.widthAnchor.constraint(equalToConstant: resolvedRightWidth),
-        right.topAnchor.constraint(equalTo: container.topAnchor),
-        right.bottomAnchor.constraint(equalTo: container.bottomAnchor),
       ]
+      if shouldUseCircularRightPanel {
+        splitConstraints.append(right.centerYAnchor.constraint(equalTo: left.centerYAnchor))
+        splitConstraints.append(right.heightAnchor.constraint(equalTo: left.heightAnchor))
+        splitConstraints.append(right.widthAnchor.constraint(equalTo: right.heightAnchor))
+      } else {
+        splitConstraints.append(right.topAnchor.constraint(equalTo: container.topAnchor))
+        splitConstraints.append(right.bottomAnchor.constraint(equalTo: container.bottomAnchor))
+        splitConstraints.append(right.widthAnchor.constraint(equalToConstant: resolvedRightWidth))
+      }
+      self.activeSplitConstraints = splitConstraints
       NSLayoutConstraint.activate(self.activeSplitConstraints)
+      self.logRightPanelDebug(
+        tag: "CN_TABBAR_INIT_AFTER_CONSTRAINTS",
+        tabBar: right,
+        container: container,
+        shouldCircular: shouldUseCircularRightPanel,
+        resolvedRightWidth: resolvedRightWidth
+      )
+      if shouldUseCircularRightPanel {
+        self.applyCircularPanelStyle(on: right)
+        self.scheduleCircularStyleRetry(on: right)
+      } else {
+        self.clearCircularPanelStyle(on: right)
+      }
       // Force layout update for background and text rendering on iOS < 16
       // Re-assign items after layout to ensure labels render properly
       // Capture selectedIndex for restoration after item re-assignment
@@ -340,6 +388,17 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
         left.layoutIfNeeded()
         right.setNeedsLayout()
         right.layoutIfNeeded()
+        self.logRightPanelDebug(
+          tag: "CN_TABBAR_INIT_AFTER_LAYOUT",
+          tabBar: right,
+          container: self.container,
+          shouldCircular: shouldUseCircularRightPanel,
+          resolvedRightWidth: resolvedRightWidth
+        )
+        if shouldUseCircularRightPanel {
+          self.applyCircularPanelStyle(on: right)
+          self.scheduleCircularStyleRetry(on: right)
+        }
         // Re-assign items to force label rendering
         let leftItems = left.items
         let rightItems = right.items
@@ -357,14 +416,25 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
           }
         }
         // Force another update cycle for text rendering
-        DispatchQueue.main.async { [weak left, weak right] in
-          guard let left = left, let right = right else { return }
+        DispatchQueue.main.async { [weak self, weak left, weak right] in
+          guard let self = self, let left = left, let right = right else { return }
           left.setNeedsDisplay()
           right.setNeedsDisplay()
           left.setNeedsLayout()
           left.layoutIfNeeded()
           right.setNeedsLayout()
           right.layoutIfNeeded()
+          self.logRightPanelDebug(
+            tag: "CN_TABBAR_INIT_AFTER_SECOND_LAYOUT",
+            tabBar: right,
+            container: self.container,
+            shouldCircular: shouldUseCircularRightPanel,
+            resolvedRightWidth: resolvedRightWidth
+          )
+          if shouldUseCircularRightPanel {
+            self.applyCircularPanelStyle(on: right)
+            self.scheduleCircularStyleRetry(on: right)
+          }
         }
       }
     } else {
@@ -745,8 +815,19 @@ channel.setMethodCallHandler { [weak self] call, result in
             }
             left.layer.shadowOpacity = 0; right.layer.shadowOpacity = 0
             left.delegate = self; right.delegate = self
-            left.itemPositioning = .centered; right.itemPositioning = .centered
-            left.itemSpacing = 8; right.itemSpacing = 8
+            if UIDevice.current.userInterfaceIdiom == .pad {
+              // On iPad, prefer filling each split container so long labels can use
+              // available horizontal room instead of staying tightly content-centered.
+              left.itemPositioning = .fill
+              right.itemPositioning = .fill
+              left.itemSpacing = 0
+              right.itemSpacing = 0
+            } else {
+              left.itemPositioning = .centered
+              right.itemPositioning = .centered
+              left.itemSpacing = 8
+              right.itemSpacing = 8
+            }
             if let ap = appearance { if #available(iOS 13.0, *) { left.standardAppearance = ap; right.standardAppearance = ap; if #available(iOS 15.0, *) { left.scrollEdgeAppearance = ap; right.scrollEdgeAppearance = ap } } }
             if self.iconAboveLabel { Self.forceStackedLayout(on: left); Self.forceStackedLayout(on: right) } else { Self.forceInlineLayout(on: left); Self.forceInlineLayout(on: right) }
             left.items = buildItems(0..<leftEnd)
@@ -777,13 +858,30 @@ channel.setMethodCallHandler { [weak self] call, result in
             let leftWidth = leftFittedInvalid ? leftFallbackWidth : max(leftFittedWidth, leftFallbackWidth)
             let rightWidth = rightFittedInvalid ? rightFallbackWidth : max(rightFittedWidth, rightFallbackWidth)
 
-            let adjustedRightWidth = rightWidth
+            let shouldUseCircularRightPanel = rightCount == 1
+            let rightPanelDiameter = max(
+              1,
+              right.sizeThatFits(
+                CGSize(
+                  width: CGFloat.greatestFiniteMagnitude,
+                  height: CGFloat.greatestFiniteMagnitude
+                )
+              ).height
+            )
+
+            let adjustedRightWidth = shouldUseCircularRightPanel ? rightPanelDiameter : rightWidth
             let adjustedLeftWidth = leftWidth
             let adjustedTotal = adjustedLeftWidth + adjustedRightWidth + spacing
             var resolvedLeftWidth = adjustedLeftWidth
             var resolvedRightWidth = adjustedRightWidth
             let shouldScaleDown = adjustedTotal > availableWidth
-            if shouldScaleDown {
+            let shouldExpandForIPadLabels = self.iconAboveLabel && UIDevice.current.userInterfaceIdiom == .pad
+            if shouldUseCircularRightPanel {
+              resolvedRightWidth = rightPanelDiameter
+              if shouldScaleDown {
+                resolvedLeftWidth = max(0, availableWidth - spacing - resolvedRightWidth)
+              }
+            } else if shouldScaleDown || shouldExpandForIPadLabels {
               let usable = max(0, availableWidth - spacing)
               let totalItems = max(1, count)
               let leftFraction = CGFloat(count - rightCount) / CGFloat(totalItems)
@@ -796,18 +894,38 @@ channel.setMethodCallHandler { [weak self] call, result in
 
             // Always center both panels as one group to avoid hot-reload drift.
             let halfTotal = (resolvedLeftWidth + spacing + resolvedRightWidth) / 2
-            self.activeSplitConstraints = [
+            var splitConstraints: [NSLayoutConstraint] = [
               left.leadingAnchor.constraint(equalTo: self.container.centerXAnchor, constant: -halfTotal),
               left.widthAnchor.constraint(equalToConstant: resolvedLeftWidth),
               left.topAnchor.constraint(equalTo: self.container.topAnchor),
               left.bottomAnchor.constraint(equalTo: self.container.bottomAnchor),
 
               right.leadingAnchor.constraint(equalTo: left.trailingAnchor, constant: spacing),
-              right.widthAnchor.constraint(equalToConstant: resolvedRightWidth),
-              right.topAnchor.constraint(equalTo: self.container.topAnchor),
-              right.bottomAnchor.constraint(equalTo: self.container.bottomAnchor),
             ]
+            if shouldUseCircularRightPanel {
+              splitConstraints.append(right.centerYAnchor.constraint(equalTo: left.centerYAnchor))
+              splitConstraints.append(right.heightAnchor.constraint(equalTo: left.heightAnchor))
+              splitConstraints.append(right.widthAnchor.constraint(equalTo: right.heightAnchor))
+            } else {
+              splitConstraints.append(right.topAnchor.constraint(equalTo: self.container.topAnchor))
+              splitConstraints.append(right.bottomAnchor.constraint(equalTo: self.container.bottomAnchor))
+              splitConstraints.append(right.widthAnchor.constraint(equalToConstant: resolvedRightWidth))
+            }
+            self.activeSplitConstraints = splitConstraints
             NSLayoutConstraint.activate(self.activeSplitConstraints)
+            self.logRightPanelDebug(
+              tag: "CN_TABBAR_SETLAYOUT_AFTER_CONSTRAINTS",
+              tabBar: right,
+              container: self.container,
+              shouldCircular: shouldUseCircularRightPanel,
+              resolvedRightWidth: resolvedRightWidth
+            )
+            if shouldUseCircularRightPanel {
+              self.applyCircularPanelStyle(on: right)
+              self.scheduleCircularStyleRetry(on: right)
+            } else {
+              self.clearCircularPanelStyle(on: right)
+            }
             // Force layout update for background and text rendering on iOS < 16
             // Re-assign items after layout to ensure labels render properly
             // Capture selectedIndex for restoration after item re-assignment
@@ -821,6 +939,17 @@ channel.setMethodCallHandler { [weak self] call, result in
               left.layoutIfNeeded()
               right.setNeedsLayout()
               right.layoutIfNeeded()
+              self.logRightPanelDebug(
+                tag: "CN_TABBAR_SETLAYOUT_AFTER_LAYOUT",
+                tabBar: right,
+                container: self.container,
+                shouldCircular: shouldUseCircularRightPanel,
+                resolvedRightWidth: resolvedRightWidth
+              )
+              if shouldUseCircularRightPanel {
+                self.applyCircularPanelStyle(on: right)
+                self.scheduleCircularStyleRetry(on: right)
+              }
               // Re-assign items to force label rendering
               let leftItems = left.items
               let rightItems = right.items
@@ -838,14 +967,25 @@ channel.setMethodCallHandler { [weak self] call, result in
                 }
               }
               // Force another update cycle for text rendering
-              DispatchQueue.main.async { [weak left, weak right] in
-                guard let left = left, let right = right else { return }
+              DispatchQueue.main.async { [weak self, weak left, weak right] in
+                guard let self = self, let left = left, let right = right else { return }
                 left.setNeedsDisplay()
                 right.setNeedsDisplay()
                 left.setNeedsLayout()
                 left.layoutIfNeeded()
                 right.setNeedsLayout()
                 right.layoutIfNeeded()
+                self.logRightPanelDebug(
+                  tag: "CN_TABBAR_SETLAYOUT_AFTER_SECOND_LAYOUT",
+                  tabBar: right,
+                  container: self.container,
+                  shouldCircular: shouldUseCircularRightPanel,
+                  resolvedRightWidth: resolvedRightWidth
+                )
+                if shouldUseCircularRightPanel {
+                  self.applyCircularPanelStyle(on: right)
+                  self.scheduleCircularStyleRetry(on: right)
+                }
               }
             }
           } else {
@@ -1169,6 +1309,74 @@ channel.setMethodCallHandler { [weak self] call, result in
     if #available(iOS 17.0, *) {
       tabBar.traitOverrides.horizontalSizeClass = .regular
     }
+  }
+
+  private func applyCircularPanelStyle(on tabBar: UITabBar) {
+    tabBar.layoutIfNeeded()
+    if #available(iOS 13.0, *) {
+      tabBar.layer.cornerCurve = .circular
+    }
+    let diameter = max(0, min(tabBar.bounds.width, tabBar.bounds.height))
+    tabBar.layer.cornerRadius = diameter / 2
+    tabBar.layer.masksToBounds = false
+    tabBar.clipsToBounds = false
+    tabBar.layer.mask = nil
+    // Force item to fill the full width so the Liquid Glass panel expands to match the square frame
+    tabBar.itemPositioning = .fill
+    NSLog(
+      "🧭 [CN_TABBAR_CIRCLE_APPLY] frame=\(tabBar.frame) bounds=\(tabBar.bounds) diameter=\(diameter) cornerRadius=\(tabBar.layer.cornerRadius) masks=\(tabBar.layer.masksToBounds) clips=\(tabBar.clipsToBounds) hasMask=\(tabBar.layer.mask != nil)"
+    )
+  }
+
+  private func clearCircularPanelStyle(on tabBar: UITabBar) {
+    tabBar.layer.cornerRadius = 0
+    tabBar.layer.masksToBounds = false
+    tabBar.layer.mask = nil
+    tabBar.clipsToBounds = false
+    NSLog(
+      "🧭 [CN_TABBAR_CIRCLE_CLEAR] frame=\(tabBar.frame) bounds=\(tabBar.bounds) cornerRadius=\(tabBar.layer.cornerRadius) masks=\(tabBar.layer.masksToBounds) clips=\(tabBar.clipsToBounds) hasMask=\(tabBar.layer.mask != nil)"
+    )
+  }
+
+  private func scheduleCircularStyleRetry(on tabBar: UITabBar, attempt: Int = 0) {
+    let maxAttempts = 20
+    guard attempt < maxAttempts else {
+      NSLog("🧭 [CN_TABBAR_CIRCLE_RETRY_GIVEUP] attempts=\(attempt) frame=\(tabBar.frame) bounds=\(tabBar.bounds)")
+      return
+    }
+
+    let hasValidSize = tabBar.bounds.width > 0.5 && tabBar.bounds.height > 0.5
+    if hasValidSize {
+      self.applyCircularPanelStyle(on: tabBar)
+      self.logRightPanelDebug(
+        tag: "CN_TABBAR_CIRCLE_RETRY_APPLIED_\(attempt)",
+        tabBar: tabBar,
+        container: self.container,
+        shouldCircular: true,
+        resolvedRightWidth: tabBar.bounds.width
+      )
+      return
+    }
+
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self, weak tabBar] in
+      guard let self = self, let tabBar = tabBar else { return }
+      self.scheduleCircularStyleRetry(on: tabBar, attempt: attempt + 1)
+    }
+  }
+
+  private func logRightPanelDebug(
+    tag: String,
+    tabBar: UITabBar,
+    container: UIView,
+    shouldCircular: Bool,
+    resolvedRightWidth: CGFloat
+  ) {
+    let w = tabBar.bounds.width
+    let h = tabBar.bounds.height
+    let diff = abs(w - h)
+    NSLog(
+      "🧭 [\(tag)] shouldCircular=\(shouldCircular) resolvedRightWidth=\(resolvedRightWidth) frame=\(tabBar.frame) bounds=\(tabBar.bounds) w=\(w) h=\(h) diff=\(diff) cornerRadius=\(tabBar.layer.cornerRadius) masks=\(tabBar.layer.masksToBounds) clips=\(tabBar.clipsToBounds) containerBounds=\(container.bounds)"
+    )
   }
 
   private static func applyItemColor(_ image: UIImage?, color: UIColor?) -> UIImage? {

@@ -1,8 +1,8 @@
 import 'package:flutter/cupertino.dart';
 import 'package:cupertino_native_better/cupertino_native_better.dart';
 
-/// Split Tab Bar Test with SF Symbols
-/// Tests split layout and alignment consistency
+/// Action Tab Bar Test with SF Symbols
+/// Tests action button behavior and tab selection consistency
 class SplitTabBarTestPage extends StatefulWidget {
   const SplitTabBarTestPage({super.key});
 
@@ -17,7 +17,7 @@ class _SplitTabBarTestPageState extends State<SplitTabBarTestPage> {
   Widget build(BuildContext context) {
     return CupertinoPageScaffold(
       navigationBar: CupertinoNavigationBar(
-        middle: const Text('Split Tab Bar Test'),
+        middle: const Text('Action Tab Bar Test'),
         leading: CupertinoButton(padding: EdgeInsets.zero, child: const Icon(CupertinoIcons.back), onPressed: () => Navigator.of(context).pop()),
       ),
       child: Column(
@@ -32,8 +32,20 @@ class _SplitTabBarTestPageState extends State<SplitTabBarTestPage> {
                 LiquidTabBarItem(label: 'Chat', icon: CNSymbol('bubble.left'), activeIcon: CNSymbol('bubble.left.fill')),
                 LiquidTabBarItem(label: 'Profile', icon: CNSymbol('person'), activeIcon: CNSymbol('person.fill')),
               ],
-              split: true,
-              splitSpacing: 0,
+              actionButton: LiquidTabBarActionButton(
+                icon: CNSymbol('plus.circle.fill', size: 22),
+                splitSpacing: 12,
+                onPressed: () {
+                  showCupertinoDialog<void>(
+                    context: context,
+                    builder: (_) => CupertinoAlertDialog(
+                      title: const Text('Create'),
+                      content: const Text('Action button pressed'),
+                      actions: [CupertinoDialogAction(onPressed: () => Navigator.of(context).pop(), child: const Text('OK'))],
+                    ),
+                  );
+                },
+              ),
               currentIndex: _currentIndex,
               onTap: (index) => setState(() => _currentIndex = index),
             ),
