@@ -71,7 +71,7 @@ class LiquidTabBar extends StatefulWidget {
     required this.onTap,
     this.height,
     this.actionButton,
-    this.iconAboveLabel = true,
+    this.forceCompactLayout = true,
     this.searchItem,
     this.labelStyle,
     this.searchController,
@@ -96,8 +96,9 @@ class LiquidTabBar extends StatefulWidget {
   /// This button does not change [currentIndex] and only triggers [onPressed].
   final LiquidTabBarActionButton? actionButton;
 
-  /// Whether to force icon-above-label layout on iPad.
-  final bool iconAboveLabel;
+  /// Whether to force iPad to use the same compact layout as iPhone
+  /// (icon above label). When `false`, iPad uses its native inline layout.
+  final bool forceCompactLayout;
 
   /// Custom styling for tab bar item labels.
   final LiquidTabBarLabelStyle? labelStyle;
@@ -124,7 +125,7 @@ class _LiquidTabBarState extends State<LiquidTabBar> {
   bool? _lastSplit;
   int? _lastRightCount;
   double? _lastSplitSpacing;
-  bool? _lastIconAboveLabel;
+  bool? _lastForceCompactLayout;
   String? _lastLabelStyleKey;
   bool _syncing = false;
 
@@ -212,7 +213,7 @@ class _LiquidTabBarState extends State<LiquidTabBar> {
     _lastSplit = null;
     _lastRightCount = null;
     _lastSplitSpacing = null;
-    _lastIconAboveLabel = null;
+    _lastForceCompactLayout = null;
     _lastLabelStyleKey = null;
     _lastIsDark = null;
 
@@ -233,14 +234,14 @@ class _LiquidTabBarState extends State<LiquidTabBar> {
         'split': _usesSplitLayout,
         'rightCount': _layoutRightCount,
         'splitSpacing': _layoutSplitSpacing,
-        'iconAboveLabel': widget.iconAboveLabel,
+        'forceCompactLayout': widget.forceCompactLayout,
         'availableWidth': availableWidth,
         'selectedIndex': widget.currentIndex,
       });
       _lastSplit = _usesSplitLayout;
       _lastRightCount = _layoutRightCount;
       _lastSplitSpacing = _layoutSplitSpacing;
-      _lastIconAboveLabel = widget.iconAboveLabel;
+      _lastForceCompactLayout = widget.forceCompactLayout;
       _requestIntrinsicSize();
     } catch (_) {
       // Ignore MissingPluginException during hot reload / recreation
@@ -400,7 +401,7 @@ class _LiquidTabBarState extends State<LiquidTabBar> {
       'split': _usesSplitLayout,
       'rightCount': _layoutRightCount,
       'splitSpacing': _layoutSplitSpacing,
-      'iconAboveLabel': widget.iconAboveLabel,
+      'forceCompactLayout': widget.forceCompactLayout,
       'style': capturedStyle,
       // Label style configuration
       if (capturedLabelStyle != null) 'labelStyle': capturedLabelStyle,
@@ -497,7 +498,7 @@ class _LiquidTabBarState extends State<LiquidTabBar> {
     _lastSplit = _usesSplitLayout;
     _lastRightCount = _layoutRightCount;
     _lastSplitSpacing = _layoutSplitSpacing;
-    _lastIconAboveLabel = widget.iconAboveLabel;
+    _lastForceCompactLayout = widget.forceCompactLayout;
     _lastLabelStyleKey = _labelStyleKey();
 
     // Force refresh for label rendering (Issue #6: sporadic missing labels with 5 items).
@@ -697,19 +698,19 @@ class _LiquidTabBarState extends State<LiquidTabBar> {
       if (_lastSplit != _usesSplitLayout ||
           _lastRightCount != _layoutRightCount ||
           _lastSplitSpacing != _layoutSplitSpacing ||
-          _lastIconAboveLabel != widget.iconAboveLabel) {
+          _lastForceCompactLayout != widget.forceCompactLayout) {
         await ch.invokeMethod('setLayout', {
           'split': _usesSplitLayout,
           'rightCount': _layoutRightCount,
           'splitSpacing': _layoutSplitSpacing,
-          'iconAboveLabel': widget.iconAboveLabel,
+          'forceCompactLayout': widget.forceCompactLayout,
           'availableWidth': availableWidth,
           'selectedIndex': widget.currentIndex,
         });
         _lastSplit = _usesSplitLayout;
         _lastRightCount = _layoutRightCount;
         _lastSplitSpacing = _layoutSplitSpacing;
-        _lastIconAboveLabel = widget.iconAboveLabel;
+        _lastForceCompactLayout = widget.forceCompactLayout;
         _requestIntrinsicSize();
       }
     } catch (e) {

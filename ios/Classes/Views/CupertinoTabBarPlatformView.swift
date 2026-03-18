@@ -2,13 +2,13 @@ import Flutter
 import UIKit
 import SVGKit
 
-class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate {
+class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate, UITabBarControllerDelegate {
   private let channel: FlutterMethodChannel
   private let container: UIView
   private var tabBar: UITabBar?
-  private var tabBarLeft: UITabBar?
-  private var tabBarRight: UITabBar?
-  
+  private var splitTabBarController: UITabBarController?
+  private static let actionButtonTag = 9999
+
   // MARK: - State Properties
   private var isSplit: Bool = false
   private var rightCountVal: Int = 1
@@ -27,19 +27,17 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
   private var iconScale: CGFloat = UIScreen.main.scale
   private var leftInsetVal: CGFloat = 0
   private var rightInsetVal: CGFloat = 0
-  private var splitSpacingVal: CGFloat = 12 // Apple's recommended spacing for visual separation
+  private var splitSpacingVal: CGFloat = 12
   private var currentIconSizes: [CGFloat] = []
   private var currentLabelStyle: [String: Any]? = nil
   private var currentItemPaddings: [[Double]]? = nil
-  private var iconAboveLabel: Bool = true
-  private var splitLayoutGuide: UILayoutGuide?
+  private var forceCompactLayout: Bool = true
   private var currentColors: [NSNumber?] = []
   private var currentActiveColors: [NSNumber?] = []
   private var currentBadgeColors: [NSNumber?] = []
   private var currentBadgeTextColors: [NSNumber?] = []
   private var currentBadgeDotSizes: [NSNumber?] = []
   private var currentBadgeFontSizes: [NSNumber?] = []
-  private var activeSplitConstraints: [NSLayoutConstraint] = []
   private var activeSingleConstraints: [NSLayoutConstraint] = []
 
   init(frame: CGRect, viewId: Int64, args: Any?, messenger: FlutterBinaryMessenger) {
@@ -107,7 +105,7 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
       if let rc = dict["rightCount"] as? NSNumber { rightCount = rc.intValue }
       if let sp = dict["splitSpacing"] as? NSNumber { splitSpacingVal = CGFloat(truncating: sp) }
       if let ls = dict["labelStyle"] as? [String: Any] { currentLabelStyle = ls }
-      if let ial = dict["iconAboveLabel"] as? NSNumber { self.iconAboveLabel = ial.boolValue }
+      if let ial = dict["forceCompactLayout"] as? NSNumber { self.forceCompactLayout = ial.boolValue }
       if let rawPaddings = dict["itemPaddings"] as? [Any] {
         currentItemPaddings = rawPaddings.map { element in
           if let arr = element as? [NSNumber] {
@@ -241,202 +239,57 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
     }
     let count = max(labels.count, symbols.count)
     if split && count > rightCount {
-      NSLog("🧭 [CN_TABBAR_INIT_SPLIT] count=\(count) rightCount=\(rightCount)")
-      let leftEnd = count - rightCount
-      let left = UITabBar(frame: .zero)
-      let right = UITabBar(frame: .zero)
-      tabBarLeft = left; tabBarRight = right
-      left.translatesAutoresizingMaskIntoConstraints = false
-      right.translatesAutoresizingMaskIntoConstraints = false
-      // On iOS 26+, allow overflow for Liquid Glass pill effect
-      if #available(iOS 26.0, *) {
-        left.clipsToBounds = false; right.clipsToBounds = false
-      } else {
-        left.clipsToBounds = true; right.clipsToBounds = true // Prevent shadow leakage
-      }
-      left.layer.shadowOpacity = 0; right.layer.shadowOpacity = 0
-      left.delegate = self; right.delegate = self
-      if UIDevice.current.userInterfaceIdiom == .pad {
-        // On iPad, prefer filling each split container so long labels can use
-        // available horizontal room instead of staying tightly content-centered.
-        left.itemPositioning = .fill
-        right.itemPositioning = .fill
-        left.itemSpacing = 0
-        right.itemSpacing = 0
-      } else {
-        left.itemPositioning = .centered
-        right.itemPositioning = .centered
-        left.itemSpacing = 8
-        right.itemSpacing = 8
-      }
-      if #available(iOS 10.0, *), let tint = tint { left.tintColor = tint; right.tintColor = tint }
-      if let ap = appearance { if #available(iOS 13.0, *) { left.standardAppearance = ap; right.standardAppearance = ap; if #available(iOS 15.0, *) { left.scrollEdgeAppearance = ap; right.scrollEdgeAppearance = ap } } }
-      if self.iconAboveLabel { Self.forceStackedLayout(on: left); Self.forceStackedLayout(on: right) } else { Self.forceInlineLayout(on: left); Self.forceInlineLayout(on: right) }
-      
-      left.items = buildItems(0..<leftEnd)
-      right.items = buildItems(leftEnd..<count)
-      if selectedIndex < leftEnd, let items = left.items {
-        left.selectedItem = items[selectedIndex]
-        right.selectedItem = nil
-      } else if let items = right.items {
-        let idx = selectedIndex - leftEnd
-        if idx >= 0 && idx < items.count { right.selectedItem = items[idx] }
-        left.selectedItem = nil
-      }
-      container.addSubview(left); container.addSubview(right)
-      // Compute content-fitting widths for both bars and apply symmetric spacing
-      let spacing: CGFloat = splitSpacingVal
-
-      // Ensure minimum width for items; keep this value identical in init/setLayout.
-      // Wider baseline keeps split groups visually balanced on iPad.
-      let minItemWidth: CGFloat = 88.0
-
-      // Use a stable width basis to avoid init vs hot-reload branch flips.
-      let availableWidth = max(container.bounds.width, UIScreen.main.bounds.width)
-
-      let leftItemCount = CGFloat(max(1, count - rightCount))
-      let rightItemCount = CGFloat(max(1, rightCount))
-      let leftFallbackWidth = minItemWidth * leftItemCount + leftInset * 2
-      let rightFallbackWidth = minItemWidth * rightItemCount + rightInset * 2
-
-      let leftFittedWidth = left.sizeThatFits(.zero).width + leftInset * 2
-      let rightFittedWidth = right.sizeThatFits(.zero).width + rightInset * 2
-      let leftFittedInvalid = leftFittedWidth <= 0 || leftFittedWidth >= availableWidth * 0.95
-      let rightFittedInvalid = rightFittedWidth <= 0 || rightFittedWidth >= availableWidth * 0.95
-
-      let leftWidth = leftFittedInvalid ? leftFallbackWidth : max(leftFittedWidth, leftFallbackWidth)
-      let rightWidth = rightFittedInvalid ? rightFallbackWidth : max(rightFittedWidth, rightFallbackWidth)
-
-      let shouldUseCircularRightPanel = rightCount == 1
-      let rightPanelDiameter = max(
-        1,
-        right.sizeThatFits(
-          CGSize(
-            width: CGFloat.greatestFiniteMagnitude,
-            height: CGFloat.greatestFiniteMagnitude
-          )
-        ).height
-      )
-
-      let adjustedRightWidth = shouldUseCircularRightPanel ? rightPanelDiameter : rightWidth
-      let adjustedLeftWidth = leftWidth
-      let adjustedTotal = adjustedLeftWidth + adjustedRightWidth + spacing
-      var resolvedLeftWidth = adjustedLeftWidth
-      var resolvedRightWidth = adjustedRightWidth
-      let shouldScaleDown = adjustedTotal > availableWidth
-      let shouldExpandForIPadLabels = self.iconAboveLabel && UIDevice.current.userInterfaceIdiom == .pad
-      if shouldUseCircularRightPanel {
-        resolvedRightWidth = rightPanelDiameter
-        if shouldScaleDown {
-          resolvedLeftWidth = max(0, availableWidth - spacing - resolvedRightWidth)
+      NSLog("🧭 [CN_TABBAR_INIT_SPLIT] count=\(count) rightCount=\(rightCount) using UITabBarController")
+      // Use UITabBarController so UIKit handles the Liquid Glass split layout natively.
+      // The action button is added as a regular tab bar item; its tap is intercepted via the delegate.
+      let tbc = UITabBarController()
+      tbc.delegate = self
+      self.splitTabBarController = tbc
+      let items = buildItems(0..<count)
+      var controllers: [UIViewController] = []
+      for (i, item) in items.enumerated() {
+        let vc = UIViewController()
+        vc.view.backgroundColor = .clear
+        // Use tabBarSystemItem: .search for the action button item so iOS 26
+        // renders it as a separate Liquid Glass pill (the split effect).
+        if i >= count - rightCount {
+          let actionItem = UITabBarItem(tabBarSystemItem: .search, tag: Self.actionButtonTag + i)
+          actionItem.image = item.image
+          actionItem.selectedImage = item.selectedImage
+          actionItem.title = item.title
+          actionItem.badgeValue = item.badgeValue
+          actionItem.badgeColor = item.badgeColor
+          vc.tabBarItem = actionItem
+        } else {
+          item.tag = i
+          vc.tabBarItem = item
         }
-      } else if shouldScaleDown || shouldExpandForIPadLabels {
-        let usable = max(0, availableWidth - spacing)
-        let totalItems = max(1, count)
-        let leftFraction = CGFloat(count - rightCount) / CGFloat(totalItems)
-        let rightFraction = CGFloat(rightCount) / CGFloat(totalItems)
-        resolvedLeftWidth = usable * leftFraction
-        resolvedRightWidth = usable * rightFraction
+        controllers.append(vc)
       }
-
-      NSLog("🧭 [CN_TABBAR_INIT_LAYOUT] leftWidth=\(leftWidth) rightWidth=\(rightWidth) adjLeft=\(adjustedLeftWidth) adjRight=\(adjustedRightWidth) resolvedLeft=\(resolvedLeftWidth) resolvedRight=\(resolvedRightWidth) adjTotal=\(adjustedTotal) available=\(availableWidth) scaled=\(shouldScaleDown) leftFitInvalid=\(leftFittedInvalid) rightFitInvalid=\(rightFittedInvalid) containerBounds=\(container.bounds.width)")
-
-      // Always center both panels as one group to avoid hot-reload drift.
-      let halfTotal = (resolvedLeftWidth + spacing + resolvedRightWidth) / 2
-      var splitConstraints: [NSLayoutConstraint] = [
-        left.leadingAnchor.constraint(equalTo: container.centerXAnchor, constant: -halfTotal),
-        left.widthAnchor.constraint(equalToConstant: resolvedLeftWidth),
-        left.topAnchor.constraint(equalTo: container.topAnchor),
-        left.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-
-        right.leadingAnchor.constraint(equalTo: left.trailingAnchor, constant: spacing),
-      ]
-      if shouldUseCircularRightPanel {
-        splitConstraints.append(right.centerYAnchor.constraint(equalTo: left.centerYAnchor))
-        splitConstraints.append(right.heightAnchor.constraint(equalTo: left.heightAnchor))
-        splitConstraints.append(right.widthAnchor.constraint(equalTo: right.heightAnchor))
-      } else {
-        splitConstraints.append(right.topAnchor.constraint(equalTo: container.topAnchor))
-        splitConstraints.append(right.bottomAnchor.constraint(equalTo: container.bottomAnchor))
-        splitConstraints.append(right.widthAnchor.constraint(equalToConstant: resolvedRightWidth))
+      // Apply trait overrides before setViewControllers so UIKit uses
+      // the correct size class from the start (affects split layout spacing).
+      if self.forceCompactLayout { Self.forceCompactTraits(on: tbc) } else { Self.clearTraitOverrides(on: tbc) }
+      tbc.setViewControllers(controllers, animated: false)
+      tbc.view.backgroundColor = .clear
+      tbc.view.isOpaque = false
+      let bar = tbc.tabBar
+      bar.isTranslucent = true
+      if self.forceCompactLayout { Self.forceCompactTraits(on: bar) } else { Self.clearTraitOverrides(on: bar) }
+      if #available(iOS 10.0, *), let tint = tint { bar.tintColor = tint }
+      if let ap = appearance { if #available(iOS 13.0, *) { bar.standardAppearance = ap; if #available(iOS 15.0, *) { bar.scrollEdgeAppearance = ap } } }
+      // Set selection (skip action button indices)
+      if selectedIndex >= 0 && selectedIndex < count - rightCount {
+        tbc.selectedIndex = selectedIndex
       }
-      self.activeSplitConstraints = splitConstraints
-      NSLayoutConstraint.activate(self.activeSplitConstraints)
-      self.logRightPanelDebug(
-        tag: "CN_TABBAR_INIT_AFTER_CONSTRAINTS",
-        tabBar: right,
-        container: container,
-        shouldCircular: shouldUseCircularRightPanel,
-        resolvedRightWidth: resolvedRightWidth
-      )
-      if shouldUseCircularRightPanel {
-        self.applyCircularPanelStyle(on: right)
-        self.scheduleCircularStyleRetry(on: right)
-      } else {
-        self.clearCircularPanelStyle(on: right)
-      }
-      // Force layout update for background and text rendering on iOS < 16
-      // Re-assign items after layout to ensure labels render properly
-      // Capture selectedIndex for restoration after item re-assignment
-      let capturedSelectedIndex = selectedIndex
-      let capturedLeftEnd = leftEnd
-      DispatchQueue.main.async { [weak self, weak left, weak right] in
-        guard let self = self, let left = left, let right = right else { return }
-        self.container.setNeedsLayout()
-        self.container.layoutIfNeeded()
-        left.setNeedsLayout()
-        left.layoutIfNeeded()
-        right.setNeedsLayout()
-        right.layoutIfNeeded()
-        self.logRightPanelDebug(
-          tag: "CN_TABBAR_INIT_AFTER_LAYOUT",
-          tabBar: right,
-          container: self.container,
-          shouldCircular: shouldUseCircularRightPanel,
-          resolvedRightWidth: resolvedRightWidth
-        )
-        if shouldUseCircularRightPanel {
-          self.applyCircularPanelStyle(on: right)
-          self.scheduleCircularStyleRetry(on: right)
-        }
-        // Re-assign items to force label rendering
-        let leftItems = left.items
-        let rightItems = right.items
-        left.items = leftItems
-        right.items = rightItems
-        // Restore selection after re-assigning items (re-assignment can reset selection)
-        if capturedSelectedIndex < capturedLeftEnd, let items = left.items, capturedSelectedIndex < items.count {
-          left.selectedItem = items[capturedSelectedIndex]
-          right.selectedItem = nil
-        } else if let items = right.items {
-          let idx = capturedSelectedIndex - capturedLeftEnd
-          if idx >= 0 && idx < items.count {
-            right.selectedItem = items[idx]
-            left.selectedItem = nil
-          }
-        }
-        // Force another update cycle for text rendering
-        DispatchQueue.main.async { [weak self, weak left, weak right] in
-          guard let self = self, let left = left, let right = right else { return }
-          left.setNeedsDisplay()
-          right.setNeedsDisplay()
-          left.setNeedsLayout()
-          left.layoutIfNeeded()
-          right.setNeedsLayout()
-          right.layoutIfNeeded()
-          self.logRightPanelDebug(
-            tag: "CN_TABBAR_INIT_AFTER_SECOND_LAYOUT",
-            tabBar: right,
-            container: self.container,
-            shouldCircular: shouldUseCircularRightPanel,
-            resolvedRightWidth: resolvedRightWidth
-          )
-          if shouldUseCircularRightPanel {
-            self.applyCircularPanelStyle(on: right)
-            self.scheduleCircularStyleRetry(on: right)
-          }
-        }
-      }
+      // Add controller's view to container with edge-to-edge constraints
+      tbc.view.translatesAutoresizingMaskIntoConstraints = false
+      container.addSubview(tbc.view)
+      NSLayoutConstraint.activate([
+        tbc.view.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+        tbc.view.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+        tbc.view.topAnchor.constraint(equalTo: container.topAnchor),
+        tbc.view.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+      ])
     } else {
       let bar = UITabBar(frame: .zero)
       tabBar = bar
@@ -451,7 +304,7 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
       bar.layer.shadowOpacity = 0
       if #available(iOS 10.0, *), let tint = tint { bar.tintColor = tint }
       if let ap = appearance { if #available(iOS 13.0, *) { bar.standardAppearance = ap; if #available(iOS 15.0, *) { bar.scrollEdgeAppearance = ap } } }
-      if self.iconAboveLabel { Self.forceStackedLayout(on: bar) } else { Self.forceInlineLayout(on: bar) }
+      if self.forceCompactLayout { Self.forceCompactTraits(on: bar) } else { Self.clearTraitOverrides(on: bar) }
       bar.items = buildItems(0..<count)
       if selectedIndex >= 0, let items = bar.items, selectedIndex < items.count { bar.selectedItem = items[selectedIndex] }
       container.addSubview(bar)
@@ -507,7 +360,7 @@ channel.setMethodCallHandler { [weak self] call, result in
       guard let self = self else { result(nil); return }
       switch call.method {
       case "getIntrinsicSize":
-        if let bar = self.tabBar ?? self.tabBarLeft ?? self.tabBarRight {
+        if let bar = self.tabBar ?? self.splitTabBarController?.tabBar {
           let size = bar.sizeThatFits(CGSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude))
           // Adjust height for larger icons - default icon is ~25pt, default height is ~49pt
           let defaultIconSize: CGFloat = 25.0
@@ -653,14 +506,25 @@ channel.setMethodCallHandler { [weak self] call, result in
             return items
           }
           let count = max(labels.count, symbols.count)
-          if self.isSplit && count > self.rightCountVal, let left = self.tabBarLeft, let right = self.tabBarRight {
-            let leftEnd = count - self.rightCountVal
-            left.items = buildItems(0..<leftEnd)
-            right.items = buildItems(leftEnd..<count)
-            if selectedIndex < leftEnd, let items = left.items { left.selectedItem = items[selectedIndex]; right.selectedItem = nil }
-            else if let items = right.items {
-              let idx = selectedIndex - leftEnd
-              if idx >= 0 && idx < items.count { right.selectedItem = items[idx]; left.selectedItem = nil }
+          if self.isSplit && count > self.rightCountVal, let tbc = self.splitTabBarController, let vcs = tbc.viewControllers {
+            let items = buildItems(0..<count)
+            for (i, item) in items.enumerated() {
+              guard i < vcs.count else { break }
+              let vc = vcs[i]
+              if vc.tabBarItem.tag >= Self.actionButtonTag {
+                // Preserve the system item tag; update icon/title/badge
+                vc.tabBarItem.image = item.image
+                vc.tabBarItem.selectedImage = item.selectedImage
+                vc.tabBarItem.title = item.title
+                vc.tabBarItem.badgeValue = item.badgeValue
+                vc.tabBarItem.badgeColor = item.badgeColor
+              } else {
+                item.tag = i
+                vc.tabBarItem = item
+              }
+            }
+            if selectedIndex >= 0 && selectedIndex < count - self.rightCountVal {
+              tbc.selectedIndex = selectedIndex
             }
             result(nil)
           } else if let bar = self.tabBar {
@@ -679,18 +543,14 @@ channel.setMethodCallHandler { [weak self] call, result in
           let leftInset = self.leftInsetVal
           let rightInset = self.rightInsetVal
           if let sp = args["splitSpacing"] as? NSNumber { self.splitSpacingVal = CGFloat(truncating: sp) }
-          if let ial = args["iconAboveLabel"] as? NSNumber { self.iconAboveLabel = ial.boolValue }
+          if let ial = args["forceCompactLayout"] as? NSNumber { self.forceCompactLayout = ial.boolValue }
           let dartAvailableWidth = (args["availableWidth"] as? NSNumber).map { CGFloat($0.doubleValue) }
           let selectedIndex = (args["selectedIndex"] as? NSNumber)?.intValue ?? 0
-          // Remove existing bars and any stale layout guide
-          NSLayoutConstraint.deactivate(self.activeSplitConstraints)
+          // Remove existing bars and controllers
           NSLayoutConstraint.deactivate(self.activeSingleConstraints)
-          self.activeSplitConstraints = []
           self.activeSingleConstraints = []
           self.tabBar?.removeFromSuperview(); self.tabBar = nil
-          self.tabBarLeft?.removeFromSuperview(); self.tabBarLeft = nil
-          self.tabBarRight?.removeFromSuperview(); self.tabBarRight = nil
-          if let old = self.splitLayoutGuide { self.container.removeLayoutGuide(old); self.splitLayoutGuide = nil }
+          self.splitTabBarController?.view.removeFromSuperview(); self.splitTabBarController = nil
           let labels = self.currentLabels
           let symbols = self.currentSymbols
           let activeSymbols = self.currentActiveSymbols
@@ -800,194 +660,51 @@ channel.setMethodCallHandler { [weak self] call, result in
           }
           let count = max(labels.count, symbols.count)
           if split && count > rightCount {
-            NSLog("🧭 [CN_TABBAR_SETLAYOUT_SPLIT] count=\(count) rightCount=\(rightCount)")
-            let leftEnd = count - rightCount
-            let left = UITabBar(frame: .zero)
-            let right = UITabBar(frame: .zero)
-            self.tabBarLeft = left; self.tabBarRight = right
-            left.translatesAutoresizingMaskIntoConstraints = false
-            right.translatesAutoresizingMaskIntoConstraints = false
-            // On iOS 26+, allow overflow for Liquid Glass pill effect
-            if #available(iOS 26.0, *) {
-              left.clipsToBounds = false; right.clipsToBounds = false
-            } else {
-              left.clipsToBounds = true; right.clipsToBounds = true
-            }
-            left.layer.shadowOpacity = 0; right.layer.shadowOpacity = 0
-            left.delegate = self; right.delegate = self
-            if UIDevice.current.userInterfaceIdiom == .pad {
-              // On iPad, prefer filling each split container so long labels can use
-              // available horizontal room instead of staying tightly content-centered.
-              left.itemPositioning = .fill
-              right.itemPositioning = .fill
-              left.itemSpacing = 0
-              right.itemSpacing = 0
-            } else {
-              left.itemPositioning = .centered
-              right.itemPositioning = .centered
-              left.itemSpacing = 8
-              right.itemSpacing = 8
-            }
-            if let ap = appearance { if #available(iOS 13.0, *) { left.standardAppearance = ap; right.standardAppearance = ap; if #available(iOS 15.0, *) { left.scrollEdgeAppearance = ap; right.scrollEdgeAppearance = ap } } }
-            if self.iconAboveLabel { Self.forceStackedLayout(on: left); Self.forceStackedLayout(on: right) } else { Self.forceInlineLayout(on: left); Self.forceInlineLayout(on: right) }
-            left.items = buildItems(0..<leftEnd)
-            right.items = buildItems(leftEnd..<count)
-            if selectedIndex < leftEnd, let items = left.items { left.selectedItem = items[selectedIndex]; right.selectedItem = nil }
-            else if let items = right.items { let idx = selectedIndex - leftEnd; if idx >= 0 && idx < items.count { right.selectedItem = items[idx]; left.selectedItem = nil } }
-            self.container.addSubview(left); self.container.addSubview(right)
-            let spacing: CGFloat = splitSpacingVal
-
-            // Ensure minimum width for items; keep this value identical in init/setLayout.
-            // Wider baseline keeps split groups visually balanced on iPad.
-            let minItemWidth: CGFloat = 88.0
-
-            // Use the same stable width basis as init to avoid branch divergence.
-            let widthFromDart = dartAvailableWidth ?? 0
-            let availableWidth = max(max(widthFromDart, self.container.bounds.width), UIScreen.main.bounds.width)
-
-            let leftItemCount = CGFloat(max(1, count - rightCount))
-            let rightItemCount = CGFloat(max(1, rightCount))
-            let leftFallbackWidth = minItemWidth * leftItemCount + leftInset * 2
-            let rightFallbackWidth = minItemWidth * rightItemCount + rightInset * 2
-
-            let leftFittedWidth = left.sizeThatFits(.zero).width + leftInset * 2
-            let rightFittedWidth = right.sizeThatFits(.zero).width + rightInset * 2
-            let leftFittedInvalid = leftFittedWidth <= 0 || leftFittedWidth >= availableWidth * 0.95
-            let rightFittedInvalid = rightFittedWidth <= 0 || rightFittedWidth >= availableWidth * 0.95
-
-            let leftWidth = leftFittedInvalid ? leftFallbackWidth : max(leftFittedWidth, leftFallbackWidth)
-            let rightWidth = rightFittedInvalid ? rightFallbackWidth : max(rightFittedWidth, rightFallbackWidth)
-
-            let shouldUseCircularRightPanel = rightCount == 1
-            let rightPanelDiameter = max(
-              1,
-              right.sizeThatFits(
-                CGSize(
-                  width: CGFloat.greatestFiniteMagnitude,
-                  height: CGFloat.greatestFiniteMagnitude
-                )
-              ).height
-            )
-
-            let adjustedRightWidth = shouldUseCircularRightPanel ? rightPanelDiameter : rightWidth
-            let adjustedLeftWidth = leftWidth
-            let adjustedTotal = adjustedLeftWidth + adjustedRightWidth + spacing
-            var resolvedLeftWidth = adjustedLeftWidth
-            var resolvedRightWidth = adjustedRightWidth
-            let shouldScaleDown = adjustedTotal > availableWidth
-            let shouldExpandForIPadLabels = self.iconAboveLabel && UIDevice.current.userInterfaceIdiom == .pad
-            if shouldUseCircularRightPanel {
-              resolvedRightWidth = rightPanelDiameter
-              if shouldScaleDown {
-                resolvedLeftWidth = max(0, availableWidth - spacing - resolvedRightWidth)
+            NSLog("🧭 [CN_TABBAR_SETLAYOUT_SPLIT] count=\(count) rightCount=\(rightCount) using UITabBarController")
+            let tbc = UITabBarController()
+            tbc.delegate = self
+            self.splitTabBarController = tbc
+            let items = buildItems(0..<count)
+            var controllers: [UIViewController] = []
+            for (i, item) in items.enumerated() {
+              let vc = UIViewController()
+              vc.view.backgroundColor = .clear
+              if i >= count - rightCount {
+                let actionItem = UITabBarItem(tabBarSystemItem: .search, tag: Self.actionButtonTag + i)
+                actionItem.image = item.image
+                actionItem.selectedImage = item.selectedImage
+                actionItem.title = item.title
+                actionItem.badgeValue = item.badgeValue
+                actionItem.badgeColor = item.badgeColor
+                vc.tabBarItem = actionItem
+              } else {
+                item.tag = i
+                vc.tabBarItem = item
               }
-            } else if shouldScaleDown || shouldExpandForIPadLabels {
-              let usable = max(0, availableWidth - spacing)
-              let totalItems = max(1, count)
-              let leftFraction = CGFloat(count - rightCount) / CGFloat(totalItems)
-              let rightFraction = CGFloat(rightCount) / CGFloat(totalItems)
-              resolvedLeftWidth = usable * leftFraction
-              resolvedRightWidth = usable * rightFraction
+              controllers.append(vc)
             }
-
-            NSLog("🧭 [CN_TABBAR_SETLAYOUT_LAYOUT] leftWidth=\(leftWidth) rightWidth=\(rightWidth) adjLeft=\(adjustedLeftWidth) adjRight=\(adjustedRightWidth) resolvedLeft=\(resolvedLeftWidth) resolvedRight=\(resolvedRightWidth) adjTotal=\(adjustedTotal) available=\(availableWidth) scaled=\(shouldScaleDown) leftFitInvalid=\(leftFittedInvalid) rightFitInvalid=\(rightFittedInvalid) dartAvail=\(String(describing: dartAvailableWidth)) containerBounds=\(self.container.bounds.width)")
-
-            // Always center both panels as one group to avoid hot-reload drift.
-            let halfTotal = (resolvedLeftWidth + spacing + resolvedRightWidth) / 2
-            var splitConstraints: [NSLayoutConstraint] = [
-              left.leadingAnchor.constraint(equalTo: self.container.centerXAnchor, constant: -halfTotal),
-              left.widthAnchor.constraint(equalToConstant: resolvedLeftWidth),
-              left.topAnchor.constraint(equalTo: self.container.topAnchor),
-              left.bottomAnchor.constraint(equalTo: self.container.bottomAnchor),
-
-              right.leadingAnchor.constraint(equalTo: left.trailingAnchor, constant: spacing),
-            ]
-            if shouldUseCircularRightPanel {
-              splitConstraints.append(right.centerYAnchor.constraint(equalTo: left.centerYAnchor))
-              splitConstraints.append(right.heightAnchor.constraint(equalTo: left.heightAnchor))
-              splitConstraints.append(right.widthAnchor.constraint(equalTo: right.heightAnchor))
-            } else {
-              splitConstraints.append(right.topAnchor.constraint(equalTo: self.container.topAnchor))
-              splitConstraints.append(right.bottomAnchor.constraint(equalTo: self.container.bottomAnchor))
-              splitConstraints.append(right.widthAnchor.constraint(equalToConstant: resolvedRightWidth))
+            if self.forceCompactLayout { Self.forceCompactTraits(on: tbc) } else { Self.clearTraitOverrides(on: tbc) }
+            tbc.setViewControllers(controllers, animated: false)
+            tbc.view.backgroundColor = .clear
+            tbc.view.isOpaque = false
+            let bar = tbc.tabBar
+            bar.isTranslucent = true
+            if self.forceCompactLayout { Self.forceCompactTraits(on: bar) } else { Self.clearTraitOverrides(on: bar) }
+            if let tint = (args["tint"] as? NSNumber).map({ Self.colorFromARGB($0.intValue) }) ?? bar.tintColor as UIColor? {
+              bar.tintColor = tint
             }
-            self.activeSplitConstraints = splitConstraints
-            NSLayoutConstraint.activate(self.activeSplitConstraints)
-            self.logRightPanelDebug(
-              tag: "CN_TABBAR_SETLAYOUT_AFTER_CONSTRAINTS",
-              tabBar: right,
-              container: self.container,
-              shouldCircular: shouldUseCircularRightPanel,
-              resolvedRightWidth: resolvedRightWidth
-            )
-            if shouldUseCircularRightPanel {
-              self.applyCircularPanelStyle(on: right)
-              self.scheduleCircularStyleRetry(on: right)
-            } else {
-              self.clearCircularPanelStyle(on: right)
+            if let ap = appearance { if #available(iOS 13.0, *) { bar.standardAppearance = ap; if #available(iOS 15.0, *) { bar.scrollEdgeAppearance = ap } } }
+            if selectedIndex >= 0 && selectedIndex < count - rightCount {
+              tbc.selectedIndex = selectedIndex
             }
-            // Force layout update for background and text rendering on iOS < 16
-            // Re-assign items after layout to ensure labels render properly
-            // Capture selectedIndex for restoration after item re-assignment
-            let capturedSelectedIndex = selectedIndex
-            let capturedLeftEnd = leftEnd
-            DispatchQueue.main.async { [weak self, weak left, weak right] in
-              guard let self = self, let left = left, let right = right else { return }
-              self.container.setNeedsLayout()
-              self.container.layoutIfNeeded()
-              left.setNeedsLayout()
-              left.layoutIfNeeded()
-              right.setNeedsLayout()
-              right.layoutIfNeeded()
-              self.logRightPanelDebug(
-                tag: "CN_TABBAR_SETLAYOUT_AFTER_LAYOUT",
-                tabBar: right,
-                container: self.container,
-                shouldCircular: shouldUseCircularRightPanel,
-                resolvedRightWidth: resolvedRightWidth
-              )
-              if shouldUseCircularRightPanel {
-                self.applyCircularPanelStyle(on: right)
-                self.scheduleCircularStyleRetry(on: right)
-              }
-              // Re-assign items to force label rendering
-              let leftItems = left.items
-              let rightItems = right.items
-              left.items = leftItems
-              right.items = rightItems
-              // Restore selection after re-assigning items (re-assignment can reset selection)
-              if capturedSelectedIndex < capturedLeftEnd, let items = left.items, capturedSelectedIndex < items.count {
-                left.selectedItem = items[capturedSelectedIndex]
-                right.selectedItem = nil
-              } else if let items = right.items {
-                let idx = capturedSelectedIndex - capturedLeftEnd
-                if idx >= 0 && idx < items.count {
-                  right.selectedItem = items[idx]
-                  left.selectedItem = nil
-                }
-              }
-              // Force another update cycle for text rendering
-              DispatchQueue.main.async { [weak self, weak left, weak right] in
-                guard let self = self, let left = left, let right = right else { return }
-                left.setNeedsDisplay()
-                right.setNeedsDisplay()
-                left.setNeedsLayout()
-                left.layoutIfNeeded()
-                right.setNeedsLayout()
-                right.layoutIfNeeded()
-                self.logRightPanelDebug(
-                  tag: "CN_TABBAR_SETLAYOUT_AFTER_SECOND_LAYOUT",
-                  tabBar: right,
-                  container: self.container,
-                  shouldCircular: shouldUseCircularRightPanel,
-                  resolvedRightWidth: resolvedRightWidth
-                )
-                if shouldUseCircularRightPanel {
-                  self.applyCircularPanelStyle(on: right)
-                  self.scheduleCircularStyleRetry(on: right)
-                }
-              }
-            }
+            tbc.view.translatesAutoresizingMaskIntoConstraints = false
+            self.container.addSubview(tbc.view)
+            NSLayoutConstraint.activate([
+              tbc.view.leadingAnchor.constraint(equalTo: self.container.leadingAnchor),
+              tbc.view.trailingAnchor.constraint(equalTo: self.container.trailingAnchor),
+              tbc.view.topAnchor.constraint(equalTo: self.container.topAnchor),
+              tbc.view.bottomAnchor.constraint(equalTo: self.container.bottomAnchor),
+            ])
           } else {
             let bar = UITabBar(frame: .zero)
             self.tabBar = bar
@@ -1001,7 +718,7 @@ channel.setMethodCallHandler { [weak self] call, result in
             }
             bar.layer.shadowOpacity = 0
             if let ap = appearance { if #available(iOS 13.0, *) { bar.standardAppearance = ap; if #available(iOS 15.0, *) { bar.scrollEdgeAppearance = ap } } }
-            if self.iconAboveLabel { Self.forceStackedLayout(on: bar) } else { Self.forceInlineLayout(on: bar) }
+            if self.forceCompactLayout { Self.forceCompactTraits(on: bar) } else { Self.clearTraitOverrides(on: bar) }
             bar.items = buildItems(0..<count)
             if let items = bar.items, selectedIndex >= 0, selectedIndex < items.count { bar.selectedItem = items[selectedIndex] }
             self.container.addSubview(bar)
@@ -1043,22 +760,13 @@ channel.setMethodCallHandler { [weak self] call, result in
             result(nil)
             return
           }
-          // Split bars
-          if let left = self.tabBarLeft, let leftItems = left.items {
-            if idx < leftItems.count, idx >= 0 {
-              left.selectedItem = leftItems[idx]
-              self.tabBarRight?.selectedItem = nil
+          // Split (UITabBarController)
+          if let tbc = self.splitTabBarController, let vcs = tbc.viewControllers {
+            let regularCount = vcs.filter { $0.tabBarItem.tag < Self.actionButtonTag }.count
+            if idx >= 0 && idx < regularCount {
+              tbc.selectedIndex = idx
               result(nil)
               return
-            }
-            if let right = self.tabBarRight, let rightItems = right.items {
-              let ridx = idx - leftItems.count
-              if ridx >= 0, ridx < rightItems.count {
-                right.selectedItem = rightItems[ridx]
-                self.tabBarLeft?.selectedItem = nil
-                result(nil)
-                return
-              }
             }
           }
           result(FlutterError(code: "bad_args", message: "Index out of range", details: nil))
@@ -1070,8 +778,7 @@ channel.setMethodCallHandler { [weak self] call, result in
             let c = Self.colorFromARGB(n.intValue)
             tintColor = c
             if let bar = self.tabBar { bar.tintColor = c }
-            if let left = self.tabBarLeft { left.tintColor = c }
-            if let right = self.tabBarRight { right.tintColor = c }
+            if let bar = self.splitTabBarController?.tabBar { bar.tintColor = c }
           }
           let hasClearLabelStyle = (args["clearLabelStyle"] as? NSNumber)?.boolValue == true
           if let ls = args["labelStyle"] as? [String: Any] {
@@ -1081,7 +788,7 @@ channel.setMethodCallHandler { [weak self] call, result in
           }
           if args["labelStyle"] is [String: Any] || hasClearLabelStyle {
             if #available(iOS 13.0, *) {
-              let allBars: [UITabBar] = [self.tabBar, self.tabBarLeft, self.tabBarRight].compactMap { $0 }
+              let allBars: [UITabBar] = [self.tabBar, self.splitTabBarController?.tabBar].compactMap { $0 }
               for bar in allBars {
                 let ap = UITabBarAppearance()
                 ap.configureWithDefaultBackground()
@@ -1126,7 +833,7 @@ channel.setMethodCallHandler { [weak self] call, result in
           let badgeFontSizes = args["badgeFontSizes"] != nil ? Self.extractNullableNumbers(args["badgeFontSizes"]) : self.currentBadgeFontSizes
           self.currentBadgeFontSizes = badgeFontSizes
           if #available(iOS 13.0, *) {
-            let allBars: [UITabBar] = [self.tabBar, self.tabBarLeft, self.tabBarRight].compactMap { $0 }
+            let allBars: [UITabBar] = [self.tabBar, self.splitTabBarController?.tabBar].compactMap { $0 }
             for bar in allBars {
               let ap = UITabBarAppearance()
               ap.configureWithDefaultBackground()
@@ -1163,12 +870,9 @@ channel.setMethodCallHandler { [weak self] call, result in
           if let bar = self.tabBar, let items = bar.items {
             for (i, item) in items.enumerated() { applyBadge(to: item, index: i) }
           }
-          // Update split bars
-          if let left = self.tabBarLeft, let leftItems = left.items,
-             let right = self.tabBarRight, let rightItems = right.items {
-            let leftEnd = leftItems.count
-            for (i, item) in leftItems.enumerated() { applyBadge(to: item, index: i) }
-            for (i, item) in rightItems.enumerated() { applyBadge(to: item, index: leftEnd + i) }
+          // Update split (UITabBarController)
+          if let vcs = self.splitTabBarController?.viewControllers {
+            for (i, vc) in vcs.enumerated() { applyBadge(to: vc.tabBarItem, index: i) }
           }
           result(nil)
         } else { result(FlutterError(code: "bad_args", message: "Missing badges", details: nil)) }
@@ -1208,59 +912,10 @@ channel.setMethodCallHandler { [weak self] call, result in
             }
             selectNext()
           }
-        } else if let left = self.tabBarLeft, let right = self.tabBarRight {
-          let leftOriginal = left.selectedItem
-          let rightOriginal = right.selectedItem
-          // Temporarily remove delegates to prevent callbacks during refresh
-          left.delegate = nil
-          right.delegate = nil
-          DispatchQueue.main.async { [weak self, weak left, weak right, weak leftOriginal, weak rightOriginal] in
-            guard let self = self, let left = left, let right = right,
-                  let leftItems = left.items, let rightItems = right.items else { return }
-            
-            // Process left items
-            var leftIndex = 0
-            func selectNextLeft() {
-              if leftIndex < leftItems.count {
-                left.selectedItem = leftItems[leftIndex]
-                left.setNeedsLayout()
-                left.layoutIfNeeded()
-                leftIndex += 1
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) {
-                  selectNextLeft()
-                }
-              } else {
-                // Restore original selection (nil means no selection on this bar)
-                left.selectedItem = leftOriginal
-                left.setNeedsLayout()
-                left.layoutIfNeeded()
-
-                // Process right items
-                var rightIndex = 0
-                func selectNextRight() {
-                  if rightIndex < rightItems.count {
-                    right.selectedItem = rightItems[rightIndex]
-                    right.setNeedsLayout()
-                    right.layoutIfNeeded()
-                    rightIndex += 1
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) {
-                      selectNextRight()
-                    }
-                  } else {
-                    // Restore original selection (nil means no selection on this bar)
-                    right.selectedItem = rightOriginal
-                    right.setNeedsLayout()
-                    right.layoutIfNeeded()
-                    // Restore delegates
-                    left.delegate = self
-                    right.delegate = self
-                  }
-                }
-                selectNextRight()
-              }
-            }
-            selectNextLeft()
-          }
+        } else if let tbc = self.splitTabBarController {
+          // UITabBarController handles its own layout; just force a refresh
+          tbc.tabBar.setNeedsLayout()
+          tbc.tabBar.layoutIfNeeded()
         }
         result(nil)
       default:
@@ -1272,22 +927,29 @@ channel.setMethodCallHandler { [weak self] call, result in
   func view() -> UIView { container }
 
   func tabBar(_ tabBar: UITabBar, didSelect item: UITabBarItem) {
-    // Single bar case
+    // Single bar case only (split is handled by UITabBarControllerDelegate)
     if let single = self.tabBar, single === tabBar, let items = single.items, let idx = items.firstIndex(of: item) {
       channel.invokeMethod("valueChanged", arguments: ["index": idx])
       return
     }
-    // Split left
-    if let left = tabBarLeft, left === tabBar, let items = left.items, let idx = items.firstIndex(of: item) {
-      tabBarRight?.selectedItem = nil
-      channel.invokeMethod("valueChanged", arguments: ["index": idx])
-      return
+  }
+
+  // MARK: - UITabBarControllerDelegate (split layout with action button)
+
+  func tabBarController(_ tabBarController: UITabBarController, shouldSelect viewController: UIViewController) -> Bool {
+    if viewController.tabBarItem.tag >= Self.actionButtonTag {
+      // Action button tapped — fire callback at the action item's flat index, don't change selection
+      let actionIndex = viewController.tabBarItem.tag - Self.actionButtonTag
+      channel.invokeMethod("valueChanged", arguments: ["index": actionIndex])
+      return false
     }
-    // Split right
-    if let right = tabBarRight, right === tabBar, let items = right.items, let idx = items.firstIndex(of: item), let left = tabBarLeft, let leftItems = left.items {
-      tabBarLeft?.selectedItem = nil
-      channel.invokeMethod("valueChanged", arguments: ["index": leftItems.count + idx])
-      return
+    return true
+  }
+
+  func tabBarController(_ tabBarController: UITabBarController, didSelect viewController: UIViewController) {
+    let tag = viewController.tabBarItem.tag
+    if tag < Self.actionButtonTag {
+      channel.invokeMethod("valueChanged", arguments: ["index": tag])
     }
   }
 
@@ -1299,84 +961,32 @@ channel.setMethodCallHandler { [weak self] call, result in
     return array.map { $0 is NSNull ? nil : ($0 as? NSNumber) }
   }
 
-  private static func forceStackedLayout(on tabBar: UITabBar) {
+  private static func forceCompactTraits(on tabBar: UITabBar) {
     if #available(iOS 17.0, *) {
       tabBar.traitOverrides.horizontalSizeClass = .compact
+      tabBar.traitOverrides.verticalSizeClass = .regular
     }
   }
 
-  private static func forceInlineLayout(on tabBar: UITabBar) {
+  private static func forceCompactTraits(on controller: UITabBarController) {
     if #available(iOS 17.0, *) {
-      tabBar.traitOverrides.horizontalSizeClass = .regular
+      controller.traitOverrides.horizontalSizeClass = .compact
+      controller.traitOverrides.verticalSizeClass = .regular
     }
   }
 
-  private func applyCircularPanelStyle(on tabBar: UITabBar) {
-    tabBar.layoutIfNeeded()
-    if #available(iOS 13.0, *) {
-      tabBar.layer.cornerCurve = .circular
-    }
-    let diameter = max(0, min(tabBar.bounds.width, tabBar.bounds.height))
-    tabBar.layer.cornerRadius = diameter / 2
-    tabBar.layer.masksToBounds = false
-    tabBar.clipsToBounds = false
-    tabBar.layer.mask = nil
-    // Force item to fill the full width so the Liquid Glass panel expands to match the square frame
-    tabBar.itemPositioning = .fill
-    NSLog(
-      "🧭 [CN_TABBAR_CIRCLE_APPLY] frame=\(tabBar.frame) bounds=\(tabBar.bounds) diameter=\(diameter) cornerRadius=\(tabBar.layer.cornerRadius) masks=\(tabBar.layer.masksToBounds) clips=\(tabBar.clipsToBounds) hasMask=\(tabBar.layer.mask != nil)"
-    )
-  }
-
-  private func clearCircularPanelStyle(on tabBar: UITabBar) {
-    tabBar.layer.cornerRadius = 0
-    tabBar.layer.masksToBounds = false
-    tabBar.layer.mask = nil
-    tabBar.clipsToBounds = false
-    NSLog(
-      "🧭 [CN_TABBAR_CIRCLE_CLEAR] frame=\(tabBar.frame) bounds=\(tabBar.bounds) cornerRadius=\(tabBar.layer.cornerRadius) masks=\(tabBar.layer.masksToBounds) clips=\(tabBar.clipsToBounds) hasMask=\(tabBar.layer.mask != nil)"
-    )
-  }
-
-  private func scheduleCircularStyleRetry(on tabBar: UITabBar, attempt: Int = 0) {
-    let maxAttempts = 20
-    guard attempt < maxAttempts else {
-      NSLog("🧭 [CN_TABBAR_CIRCLE_RETRY_GIVEUP] attempts=\(attempt) frame=\(tabBar.frame) bounds=\(tabBar.bounds)")
-      return
-    }
-
-    let hasValidSize = tabBar.bounds.width > 0.5 && tabBar.bounds.height > 0.5
-    if hasValidSize {
-      self.applyCircularPanelStyle(on: tabBar)
-      self.logRightPanelDebug(
-        tag: "CN_TABBAR_CIRCLE_RETRY_APPLIED_\(attempt)",
-        tabBar: tabBar,
-        container: self.container,
-        shouldCircular: true,
-        resolvedRightWidth: tabBar.bounds.width
-      )
-      return
-    }
-
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self, weak tabBar] in
-      guard let self = self, let tabBar = tabBar else { return }
-      self.scheduleCircularStyleRetry(on: tabBar, attempt: attempt + 1)
+  private static func clearTraitOverrides(on tabBar: UITabBar) {
+    if #available(iOS 17.0, *) {
+      tabBar.traitOverrides.remove(UITraitHorizontalSizeClass.self)
+      tabBar.traitOverrides.remove(UITraitVerticalSizeClass.self)
     }
   }
 
-  private func logRightPanelDebug(
-    tag: String,
-    tabBar: UITabBar,
-    container: UIView,
-    shouldCircular: Bool,
-    resolvedRightWidth: CGFloat
-  ) {
-    let w = tabBar.bounds.width
-    let h = tabBar.bounds.height
-    let diff = abs(w - h)
-    NSLog(
-      "🧭 [\(tag)] shouldCircular=\(shouldCircular) resolvedRightWidth=\(resolvedRightWidth) frame=\(tabBar.frame) bounds=\(tabBar.bounds) w=\(w) h=\(h) diff=\(diff) cornerRadius=\(tabBar.layer.cornerRadius) masks=\(tabBar.layer.masksToBounds) clips=\(tabBar.clipsToBounds) containerBounds=\(container.bounds)"
-    )
+  private static func clearTraitOverrides(on controller: UITabBarController) {
+    if #available(iOS 17.0, *) {
+      controller.traitOverrides.remove(UITraitHorizontalSizeClass.self)
+      controller.traitOverrides.remove(UITraitVerticalSizeClass.self)
+    }
   }
 
   private static func applyItemColor(_ image: UIImage?, color: UIColor?) -> UIImage? {
@@ -1557,14 +1167,9 @@ channel.setMethodCallHandler { [weak self] call, result in
       }
     }
 
-    if let left = self.tabBarLeft, let leftItems = left.items,
-       let right = self.tabBarRight, let rightItems = right.items {
-      let leftEnd = leftItems.count
-      for (i, item) in leftItems.enumerated() {
-        applyBadge(to: item, index: i)
-      }
-      for (i, item) in rightItems.enumerated() {
-        applyBadge(to: item, index: leftEnd + i)
+    if let vcs = self.splitTabBarController?.viewControllers {
+      for (i, vc) in vcs.enumerated() {
+        applyBadge(to: vc.tabBarItem, index: i)
       }
     }
   }

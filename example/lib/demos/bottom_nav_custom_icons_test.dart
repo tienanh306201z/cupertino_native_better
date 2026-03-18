@@ -44,11 +44,12 @@ class _BottomNavCustomIconsTestPageState extends State<BottomNavCustomIconsTestP
                   activeImageAsset: CNImageAsset('assets/icons/chat-filled.svg', size: _iconSize),
                 ),
                 LiquidTabBarItem(
-                  label: 'Hành trình',
-                  imageAsset: CNImageAsset('assets/icons/profile.svg', size: _iconSize),
-                  activeImageAsset: CNImageAsset('assets/icons/profile-filled.svg', size: _iconSize),
+                  label: 'Cộng đồng',
+                  imageAsset: CNImageAsset('assets/icons/chat.svg', size: _iconSize),
+                  activeImageAsset: CNImageAsset('assets/icons/chat-filled.svg', size: _iconSize),
                 ),
               ],
+              forceCompactLayout: true,
               actionButton: LiquidTabBarActionButton(
                 icon: CNSymbol('plus.circle.fill', size: 24),
                 splitSpacing: 0,
