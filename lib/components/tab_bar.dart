@@ -727,11 +727,20 @@ class _LiquidTabBarState extends State<LiquidTabBar> {
     if (_lastIsDark != isDark) {
       // Capture theme-dependent style before any await.
       final style = encodeStyle(context, tint: _themeTint);
+      // Include labelStyle so the UITabBarAppearance is rebuilt with the new
+      // tint. Without this, the appearance retains the old tint hardcoded in
+      // itemAppearance.selected.iconColor / titleTextAttributes, causing the
+      // active color to appear faded after a theme change.
+      final labelStyleParams = _buildLabelStyleParams(context);
+      if (labelStyleParams != null) {
+        style['labelStyle'] = labelStyleParams;
+      }
       try {
         await ch.invokeMethod('setBrightness', {'isDark': isDark});
         _lastIsDark = isDark;
-        // Re-send tint/unselectedTint — they are resolved from the theme and
-        // must be updated alongside brightness so colors don't appear faded.
+        // Re-send tint/unselectedTint (and labelStyle) — they are resolved
+        // from the theme and must be updated alongside brightness so colors
+        // don't appear faded.
         await ch.invokeMethod('setStyle', style);
         // Invalidate items fingerprint so adaptive icon/badge colors are
         // re-synced by the next _syncPropsToNativeIfNeeded call.
