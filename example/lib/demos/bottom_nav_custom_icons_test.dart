@@ -33,6 +33,8 @@ class _BottomNavCustomIconsTestPageState extends State<BottomNavCustomIconsTestP
                   label: 'Thư viện',
                   imageAsset: CNImageAsset('assets/icons/home.svg', size: _iconSize),
                   activeImageAsset: CNImageAsset('assets/icons/home_filled.svg', size: _iconSize),
+                  badge: '',
+                  badgeDotSize: 0,
                 ),
                 LiquidTabBarItem(
                   label: 'Cá nhân',
@@ -65,12 +67,7 @@ class _BottomNavCustomIconsTestPageState extends State<BottomNavCustomIconsTestP
                   );
                 },
               ),
-              labelStyle: LiquidTabBarLabelStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: Colors.red,
-                activeColor: Colors.green,
-              ),
+              labelStyle: LiquidTabBarLabelStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.red, activeColor: Theme.of(context).colorScheme.onSurface),
               currentIndex: _currentIndex,
               onTap: (index) => setState(() => _currentIndex = index),
             ),

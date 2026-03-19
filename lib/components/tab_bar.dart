@@ -128,6 +128,7 @@ class _LiquidTabBarState extends State<LiquidTabBar> {
   bool? _lastForceCompactLayout;
   String? _lastLabelStyleKey;
   bool _syncing = false;
+  bool _pendingSync = false;
 
   // Search state
   bool _isSearchActive = false;
@@ -575,7 +576,13 @@ class _LiquidTabBarState extends State<LiquidTabBar> {
     if (ch == null) return;
     // Guard against concurrent calls (reassemble + didUpdateWidget + didChangeDependencies
     // all fire during hot reload; letting them race causes duplicate setLayout calls).
-    if (_syncing) return;
+    if (_syncing) {
+      // Don't drop the newer state update. Queue one more pass after the
+      // current sync completes so hot reload changes (e.g. badgeColor) are
+      // always pushed to native.
+      _pendingSync = true;
+      return;
+    }
     _syncing = true;
     // Capture theme-dependent values before awaiting
     final idx = widget.currentIndex;
@@ -717,6 +724,13 @@ class _LiquidTabBarState extends State<LiquidTabBar> {
       // Ignore MissingPluginException during hot reload or view recreation
     } finally {
       _syncing = false;
+      if (_pendingSync && mounted) {
+        _pendingSync = false;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          _syncPropsToNativeIfNeeded();
+        });
+      }
     }
   }
 

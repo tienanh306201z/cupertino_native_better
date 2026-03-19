@@ -318,10 +318,21 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
         bar.clipsToBounds = true // Prevent shadow leakage on older iOS
       }
       bar.layer.shadowOpacity = 0
-      if #available(iOS 10.0, *), let tint = tint { bar.tintColor = tint }
+      // Resolve effective tint: label style activeColor takes priority over theme tint.
+      let labelActiveColor = (self.currentLabelStyle?["activeColor"] as? NSNumber).map { Self.colorFromARGB($0.intValue) }
+      let labelColor = (self.currentLabelStyle?["color"] as? NSNumber).map { Self.colorFromARGB($0.intValue) }
+      let effectiveTint = labelActiveColor ?? tint
+      if #available(iOS 10.0, *), let t = effectiveTint {
+        bar.tintColor = t
+        container.tintColor = t
+      }
+      if let c = labelColor { bar.unselectedItemTintColor = c }
       if let ap = appearance { if #available(iOS 13.0, *) { bar.standardAppearance = ap; if #available(iOS 15.0, *) { bar.scrollEdgeAppearance = ap } } }
       if self.forceCompactLayout { Self.forceCompactTraits(on: bar) } else { Self.clearTraitOverrides(on: bar) }
       bar.items = buildItems(0..<count)
+      if let items = bar.items {
+        Self.applyLabelStyleToItems(items, tabBar: bar, labelStyle: self.currentLabelStyle, tint: effectiveTint)
+      }
       if selectedIndex >= 0, let items = bar.items, selectedIndex < items.count { bar.selectedItem = items[selectedIndex] }
       container.addSubview(bar)
       self.activeSingleConstraints = [
@@ -372,6 +383,11 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
     self.currentIconSizes = sizes.compactMap { $0 }.map { CGFloat(truncating: $0) }
     self.currentColors = colors
     self.currentActiveColors = activeColors
+    // UIKit may normalize badge styling during initial layout. Re-apply badges
+    // on the live items to ensure per-item badgeColor/dot settings stick.
+    DispatchQueue.main.async { [weak self] in
+      self?.applyCurrentBadgesToVisibleItems()
+    }
 channel.setMethodCallHandler { [weak self] call, result in
       guard let self = self else { result(nil); return }
       switch call.method {
@@ -544,10 +560,15 @@ channel.setMethodCallHandler { [weak self] call, result in
             }
             // Apply label style directly to items for iPad inline layout
             Self.applyLabelStyleToItems(vcs.map { $0.tabBarItem }, tabBar: tbc.tabBar, labelStyle: self.currentLabelStyle, tint: tbc.tabBar.tintColor)
+            self.applyCurrentBadgesToVisibleItems()
             result(nil)
           } else if let bar = self.tabBar {
             bar.items = buildItems(0..<count)
             if let items = bar.items, selectedIndex >= 0, selectedIndex < items.count { bar.selectedItem = items[selectedIndex] }
+            if let items = bar.items {
+              Self.applyLabelStyleToItems(items, tabBar: bar, labelStyle: self.currentLabelStyle, tint: bar.tintColor)
+            }
+            self.applyCurrentBadgesToVisibleItems()
             result(nil)
           } else {
             result(FlutterError(code: "state_error", message: "Tab bars not initialized", details: nil))
@@ -743,9 +764,19 @@ channel.setMethodCallHandler { [weak self] call, result in
               bar.clipsToBounds = true
             }
             bar.layer.shadowOpacity = 0
+            let labelActiveColor = (self.currentLabelStyle?["activeColor"] as? NSNumber).map { Self.colorFromARGB($0.intValue) }
+            let labelColor = (self.currentLabelStyle?["color"] as? NSNumber).map { Self.colorFromARGB($0.intValue) }
+            let argsTint = (args["tint"] as? NSNumber).map { Self.colorFromARGB($0.intValue) }
+            let effectiveTint = labelActiveColor ?? argsTint ?? bar.tintColor
+            bar.tintColor = effectiveTint
+            self.container.tintColor = effectiveTint
+            if let c = labelColor { bar.unselectedItemTintColor = c }
             if let ap = appearance { if #available(iOS 13.0, *) { bar.standardAppearance = ap; if #available(iOS 15.0, *) { bar.scrollEdgeAppearance = ap } } }
             if self.forceCompactLayout { Self.forceCompactTraits(on: bar) } else { Self.clearTraitOverrides(on: bar) }
             bar.items = buildItems(0..<count)
+            if let items = bar.items {
+              Self.applyLabelStyleToItems(items, tabBar: bar, labelStyle: self.currentLabelStyle, tint: effectiveTint)
+            }
             if let items = bar.items, selectedIndex >= 0, selectedIndex < items.count { bar.selectedItem = items[selectedIndex] }
             self.container.addSubview(bar)
             self.activeSingleConstraints = [
@@ -776,6 +807,7 @@ channel.setMethodCallHandler { [weak self] call, result in
             }
           }
           self.isSplit = split; self.rightCountVal = rightCount; self.leftInsetVal = leftInset; self.rightInsetVal = rightInset
+          self.applyCurrentBadgesToVisibleItems()
           result(nil)
         } else { result(FlutterError(code: "bad_args", message: "Missing layout", details: nil)) }
       case "setSelectedIndex":
@@ -1005,7 +1037,14 @@ channel.setMethodCallHandler { [weak self] call, result in
   /// This method maps NSNull → nil and Any → NSNumber? correctly.
   private static func extractNullableNumbers(_ value: Any?) -> [NSNumber?] {
     guard let array = value as? [Any] else { return [] }
-    return array.map { $0 is NSNull ? nil : ($0 as? NSNumber) }
+    return array.map { element in
+      if element is NSNull { return nil }
+      if let number = element as? NSNumber { return number }
+      if let intValue = element as? Int { return NSNumber(value: intValue) }
+      if let doubleValue = element as? Double { return NSNumber(value: doubleValue) }
+      if let floatValue = element as? Float { return NSNumber(value: floatValue) }
+      return nil
+    }
   }
 
   private static func forceCompactTraits(on tabBar: UITabBar) {
@@ -1159,21 +1198,32 @@ channel.setMethodCallHandler { [weak self] call, result in
     let badgeDotSize = numberForItem(index: index, numbers: badgeDotSizes)
     let badgeFontSize = numberForItem(index: index, numbers: badgeFontSizes)
 
-    if isDot, let dotSize = badgeDotSize {
-      item.badgeValue = "●"
+    if isDot {
       if #available(iOS 10.0, *) {
-        let dotColor = badgeBackgroundColor ?? badgeTextColor ?? UIColor.systemRed
+        let dotColor = badgeBackgroundColor ?? UIColor.systemRed
         item.badgeColor = dotColor
-        let attrs = badgeTextAttributes(textColor: dotColor, fontSize: dotSize)
-        if !attrs.isEmpty {
+        if let dotSize = badgeDotSize {
+          // Custom-sized dot: render a glyph and tint it to match background.
+          item.badgeValue = "●"
+          var attrs: [NSAttributedString.Key: Any] = [.foregroundColor: dotColor]
+          attrs[.font] = UIFont.systemFont(ofSize: dotSize, weight: .semibold)
           item.setBadgeTextAttributes(attrs, for: .normal)
           item.setBadgeTextAttributes(attrs, for: .selected)
+        } else {
+          // Default dot: use textless bubble to avoid inner white glyph artifacts.
+          item.badgeValue = " "
+          let hiddenAttrs: [NSAttributedString.Key: Any] = [
+            .foregroundColor: UIColor.clear,
+            .font: UIFont.systemFont(ofSize: 1, weight: .regular)
+          ]
+          item.setBadgeTextAttributes(hiddenAttrs, for: .normal)
+          item.setBadgeTextAttributes(hiddenAttrs, for: .selected)
         }
       }
       return
     }
 
-    item.badgeValue = isDot ? "" : badge
+    item.badgeValue = badge
     if #available(iOS 10.0, *) {
       if let badgeBackgroundColor = badgeBackgroundColor {
         item.badgeColor = badgeBackgroundColor

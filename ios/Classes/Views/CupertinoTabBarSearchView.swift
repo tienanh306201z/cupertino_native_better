@@ -404,7 +404,14 @@ class CupertinoTabBarSearchPlatformView: NSObject, FlutterPlatformView, UITabBar
 
     private static func extractNullableNumbers(_ value: Any?) -> [NSNumber?] {
         guard let array = value as? [Any] else { return [] }
-        return array.map { $0 is NSNull ? nil : ($0 as? NSNumber) }
+        return array.map { element in
+            if element is NSNull { return nil }
+            if let number = element as? NSNumber { return number }
+            if let intValue = element as? Int { return NSNumber(value: intValue) }
+            if let doubleValue = element as? Double { return NSNumber(value: doubleValue) }
+            if let floatValue = element as? Float { return NSNumber(value: floatValue) }
+            return nil
+        }
     }
 
     private static func colorForItem(index: Int, colors: [NSNumber?]) -> UIColor? {
@@ -438,27 +445,42 @@ class CupertinoTabBarSearchPlatformView: NSObject, FlutterPlatformView, UITabBar
         badgeDotSizes: [NSNumber?],
         badgeFontSizes: [NSNumber?]
     ) {
+        if badge.isEmpty {
+            item.badgeValue = nil
+            return
+        }
+
         let isDot = badge == "\u{200B}"
         let badgeBackgroundColor = colorForItem(index: index, colors: badgeColors)
         let badgeTextColor = colorForItem(index: index, colors: badgeTextColors)
         let badgeDotSize = numberForItem(index: index, numbers: badgeDotSizes)
         let badgeFontSize = numberForItem(index: index, numbers: badgeFontSizes)
 
-        if isDot, let dotSize = badgeDotSize {
-            item.badgeValue = "●"
+        if isDot {
             if #available(iOS 10.0, *) {
-                let dotColor = badgeBackgroundColor ?? badgeTextColor ?? UIColor.systemRed
+                let dotColor = badgeBackgroundColor ?? UIColor.systemRed
                 item.badgeColor = dotColor
-                let attrs = badgeTextAttributes(textColor: dotColor, fontSize: dotSize)
-                if !attrs.isEmpty {
+                if let dotSize = badgeDotSize {
+                    // Custom-sized dot: render a glyph tinted to match background.
+                    item.badgeValue = "●"
+                    let attrs = badgeTextAttributes(textColor: dotColor, fontSize: dotSize)
                     item.setBadgeTextAttributes(attrs, for: .normal)
                     item.setBadgeTextAttributes(attrs, for: .selected)
+                } else {
+                    // Default dot: textless bubble to avoid inner white glyph artifacts.
+                    item.badgeValue = " "
+                    let hiddenAttrs: [NSAttributedString.Key: Any] = [
+                        .foregroundColor: UIColor.clear,
+                        .font: UIFont.systemFont(ofSize: 1, weight: .regular)
+                    ]
+                    item.setBadgeTextAttributes(hiddenAttrs, for: .normal)
+                    item.setBadgeTextAttributes(hiddenAttrs, for: .selected)
                 }
             }
             return
         }
 
-        item.badgeValue = isDot ? "" : badge
+        item.badgeValue = badge
         if #available(iOS 10.0, *) {
             if let badgeBackgroundColor = badgeBackgroundColor {
                 item.badgeColor = badgeBackgroundColor
