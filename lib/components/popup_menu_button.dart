@@ -330,8 +330,9 @@ class _CNPopupMenuButtonState extends State<CNPopupMenuButton> {
     final capturedIsDark = _isDark;
     final capturedStyle = encodeStyle(context, tint: _effectiveTint);
     final capturedButtonIconColor = resolveColorToArgb(
-      widget.buttonImageAsset?.color ?? widget.buttonCustomIconColor ??
-      widget.buttonIcon?.color,
+      widget.buttonImageAsset?.color ??
+          widget.buttonCustomIconColor ??
+          widget.buttonIcon?.color,
       context,
     );
     final capturedButtonPaletteColors = widget.buttonIcon?.paletteColors

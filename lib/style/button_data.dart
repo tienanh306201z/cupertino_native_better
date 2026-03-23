@@ -14,12 +14,13 @@ import 'image_placement.dart';
 
 /// Item for a popup menu button in [CNGlassButtonGroup].
 class CNButtonDataPopupItem {
-  const CNButtonDataPopupItem({
-    required this.label,
-    this.sfSymbol,
-  });
+  /// Creates a popup menu item with a [label] and optional [sfSymbol] icon.
+  const CNButtonDataPopupItem({required this.label, this.sfSymbol});
 
+  /// The text label displayed in the popup menu.
   final String label;
+
+  /// Optional SF Symbol name for the menu item icon.
   final String? sfSymbol;
 }
 
@@ -55,10 +56,10 @@ class CNButtonData {
     this.enabled = true,
     this.tint,
     this.config = const CNButtonDataConfig(),
-  })  : badgeCount = null,
-        isIcon = false,
-        popupItems = null,
-        onMenuSelected = null;
+  }) : badgeCount = null,
+       isIcon = false,
+       popupItems = null,
+       onMenuSelected = null;
 
   /// Creates an icon-only button data model.
   const CNButtonData.icon({
@@ -70,10 +71,10 @@ class CNButtonData {
     this.tint,
     this.badgeCount,
     this.config = const CNButtonDataConfig(),
-  })  : label = null,
-        isIcon = true,
-        popupItems = null,
-        onMenuSelected = null;
+  }) : label = null,
+       isIcon = true,
+       popupItems = null,
+       onMenuSelected = null;
 
   /// Creates an icon-only popup menu button.
   ///
@@ -88,10 +89,10 @@ class CNButtonData {
     this.enabled = true,
     this.tint,
     this.config = const CNButtonDataConfig(),
-  })  : label = null,
-        isIcon = true,
-        badgeCount = null,
-        onPressed = null;
+  }) : label = null,
+       isIcon = true,
+       badgeCount = null,
+       onPressed = null;
 
   /// The text label for the button. Null for icon-only buttons.
   final String? label;

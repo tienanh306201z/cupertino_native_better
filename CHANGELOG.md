@@ -1,3 +1,27 @@
+## 1.3.7
+
+### New Features
+
+- **Added**: Popup menu button support in `CNGlassButtonGroup` via `CNButtonData.popup()` (PR #23 by @byackee)
+  - Mix regular icon buttons and popup menu buttons in the same glass button group
+  - Native SwiftUI rendering with `UIMenu` support
+  - `CNButtonDataPopupItem` model for popup menu items
+- **Added**: `labelFontFamily` and `labelFontSize` properties for `CNTabBar` (PR #26, Issue #16 by @byackee)
+  - Customize tab bar label font with any registered font family
+  - Dynamic font updates via method channel
+
+### Bug Fixes
+
+- **Fixed**: `buttonCustomIconColor` now works on iOS 26 with Liquid Glass rendering (PR #24, Issue #21 by @byackee)
+  - Color is now sent to the native side via `capturedButtonIconColor`
+  - Native side applies `.withTintColor(.alwaysOriginal)` to preserve custom icon colors
+  - Menu item `iconColor` also supported for custom `IconData` icons
+- **Fixed**: `CNSwitch` no longer pushed upward by keyboard (PR #25, Issue #4 by @byackee)
+  - iOS 16.4+: uses `safeAreaRegions.remove(.keyboard)` official API
+  - Pre-iOS 16.4: runtime fix targeting the hosting view's private keyboard notification handler
+
+---
+
 ## 1.3.6
 
 ### Bug Fixes

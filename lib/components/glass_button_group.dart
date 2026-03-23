@@ -242,14 +242,20 @@ class _CNGlassButtonGroupState extends State<CNGlassButtonGroup> {
         final args = call.arguments as Map?;
         final index = args?['index'] as int?;
         final selectedIndex = args?['selectedIndex'] as int?;
-        if (index != null && index >= 0 && !_usingWidgets && index < widget.buttons.length) {
+        if (index != null &&
+            index >= 0 &&
+            !_usingWidgets &&
+            index < widget.buttons.length) {
           final btn = widget.buttons[index];
           if (btn.isPopup && selectedIndex != null && selectedIndex >= 0) {
             btn.onMenuSelected?.call(selectedIndex);
           } else if (!btn.isPopup) {
             btn.onPressed?.call();
           }
-        } else if (index != null && index >= 0 && _usingWidgets && index < widget._buttonWidgets!.length) {
+        } else if (index != null &&
+            index >= 0 &&
+            _usingWidgets &&
+            index < widget._buttonWidgets!.length) {
           widget._buttonWidgets![index].onPressed?.call();
         }
       }
@@ -585,8 +591,9 @@ class _CNGlassButtonGroupState extends State<CNGlassButtonGroup> {
         'imagePadding': button.config.imagePadding,
       if (button.isPopup) ...{
         'menuLabels': button.popupItems!.map((e) => e.label).toList(),
-        'menuSfSymbols':
-            button.popupItems!.map((e) => e.sfSymbol ?? '').toList(),
+        'menuSfSymbols': button.popupItems!
+            .map((e) => e.sfSymbol ?? '')
+            .toList(),
       },
     };
   }

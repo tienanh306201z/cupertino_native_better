@@ -487,7 +487,8 @@ class _CNTabBarState extends State<CNTabBar> {
       'sfSymbolColors': colors,
       'selectedIndex': widget.currentIndex,
       'isDark': capturedIsDark,
-      if (widget.labelFontFamily != null) 'labelFontFamily': widget.labelFontFamily,
+      if (widget.labelFontFamily != null)
+        'labelFontFamily': widget.labelFontFamily,
       if (widget.labelFontSize != null) 'labelFontSize': widget.labelFontSize,
       'split': _hasSearch
           ? true
@@ -816,7 +817,8 @@ class _CNTabBarState extends State<CNTabBar> {
         await ch.invokeMethod('setFont', {
           if (widget.labelFontFamily != null)
             'labelFontFamily': widget.labelFontFamily,
-          if (widget.labelFontSize != null) 'labelFontSize': widget.labelFontSize,
+          if (widget.labelFontSize != null)
+            'labelFontSize': widget.labelFontSize,
         });
         _lastLabelFontFamily = widget.labelFontFamily;
         _lastLabelFontSize = widget.labelFontSize;
@@ -1059,8 +1061,7 @@ class _CNTabBarState extends State<CNTabBar> {
                             widget.items[i].label!,
                             style: TextStyle(
                               fontFamily: widget.labelFontFamily,
-                              fontSize:
-                                  widget.labelFontSize ?? 12,
+                              fontSize: widget.labelFontSize ?? 12,
                               fontWeight: widget.currentIndex == i
                                   ? FontWeight.w600
                                   : FontWeight.normal,
