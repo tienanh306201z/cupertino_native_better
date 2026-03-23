@@ -32,6 +32,15 @@ class CupertinoSwitchPlatformView: NSObject, FlutterPlatformView {
     if #available(iOS 13.0, *) {
       self.hostingController.overrideUserInterfaceStyle = isDark ? .dark : .light
     }
+
+    // Prevent keyboard from pushing the switch upward (Issue #4).
+    // iOS 16.4+ has an official API; older versions need the runtime fix.
+    if #available(iOS 16.4, *) {
+      self.hostingController.safeAreaRegions.remove(.keyboard)
+    } else {
+      Self.disableKeyboardAvoidance(on: self.hostingController)
+    }
+
     super.init()
 
     if let tint = initialTint {
@@ -73,6 +82,42 @@ class CupertinoSwitchPlatformView: NSObject, FlutterPlatformView {
 
   func view() -> UIView {
     return hostingController.view
+  }
+
+  // MARK: - Keyboard avoidance fix (pre-iOS 16.4)
+
+  /// Disables keyboard avoidance on the hosting controller's internal view
+  /// by dynamically subclassing it and replacing the private
+  /// `keyboardWillShowWithNotification:` method with a no-op.
+  /// Based on https://steipete.me/posts/2020/disabling-keyboard-avoidance-in-swiftui-uihostingcontroller
+  private static func disableKeyboardAvoidance(on hostingController: UIHostingController<CupertinoSwitchView>) {
+    guard let viewClass = object_getClass(hostingController.view) else { return }
+    let viewSubclassName = String(cString: class_getName(viewClass)).appending("_IgnoreKeyboard")
+
+    if let viewSubclass = NSClassFromString(viewSubclassName) {
+      object_setClass(hostingController.view, viewSubclass)
+    } else {
+      guard let viewClassNameUtf8 = (viewSubclassName as NSString).utf8String else { return }
+      guard let viewSubclass = objc_allocateClassPair(viewClass, viewClassNameUtf8, 0) else { return }
+
+      // Override safeAreaInsets to return .zero
+      if let method = class_getInstanceMethod(UIView.self, #selector(getter: UIView.safeAreaInsets)) {
+        let safeAreaInsets: @convention(block) (AnyObject) -> UIEdgeInsets = { _ in .zero }
+        class_addMethod(viewSubclass, #selector(getter: UIView.safeAreaInsets),
+                        imp_implementationWithBlock(safeAreaInsets), method_getTypeEncoding(method))
+      }
+
+      // Replace keyboardWillShowWithNotification: with a no-op
+      let keyboardSelector = NSSelectorFromString("keyboardWillShowWithNotification:")
+      if let method = class_getInstanceMethod(viewClass, keyboardSelector) {
+        let noOp: @convention(block) (AnyObject, AnyObject) -> Void = { _, _ in }
+        class_addMethod(viewSubclass, keyboardSelector,
+                        imp_implementationWithBlock(noOp), method_getTypeEncoding(method))
+      }
+
+      objc_registerClassPair(viewSubclass)
+      object_setClass(hostingController.view, viewSubclass)
+    }
   }
 
   // Use shared utility functions
