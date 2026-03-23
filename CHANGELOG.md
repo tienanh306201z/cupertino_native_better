@@ -1,3 +1,16 @@
+## 1.3.8
+
+### Bug Fixes
+
+- **Fixed**: macOS build — resolved 5 compilation errors in native Swift code
+  - `badgeCount` parameter missing from `setupSwiftUIButton` method
+  - `.clear` color inference on `CALayer.backgroundColor` (now uses `NSColor.clear.cgColor`)
+  - `FlutterPlatformView` protocol replaced with `NSView` for LiquidGlassContainer
+  - Removed invalid `namespace` argument from `GlassButtonSwiftUI` call
+  - `NSButton.title` non-optional handling
+
+---
+
 ## 1.3.7
 
 ### New Features
