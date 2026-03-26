@@ -15,6 +15,8 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
   private var currentButtonStyle: String = "automatic"
   private var usesSwiftUI: Bool = false
   private var makeRound: Bool = false
+  private var borderRadiusValue: CGFloat? = nil
+  private var labelColorValue: UIColor? = nil
 
   init(frame: CGRect, viewId: Int64, args: Any?, messenger: FlutterBinaryMessenger) {
     self.channel = FlutterMethodChannel(name: "CupertinoNativeButton_\(viewId)", binaryMessenger: messenger)
@@ -52,6 +54,7 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
     var glassEffectInteractive: Bool = false
     var badgeCount: Int? = nil
     var interaction: Bool = true
+    var labelColor: UIColor? = nil
 
     if let dict = args as? [String: Any] {
       if let t = dict["buttonTitle"] as? String { title = t }
@@ -91,10 +94,13 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
       if let geInteractive = dict["glassEffectInteractive"] as? NSNumber { glassEffectInteractive = geInteractive.boolValue }
       if let bc = dict["badgeCount"] as? NSNumber { badgeCount = bc.intValue }
       if let inter = dict["interaction"] as? NSNumber { interaction = inter.boolValue }
+      if let lc = dict["labelColor"] as? NSNumber { labelColor = Self.colorFromARGB(lc.intValue) }
     }
 
     super.init()
 
+    self.borderRadiusValue = borderRadius
+    self.labelColorValue = labelColor
     self.isInteractive = interaction
     container.backgroundColor = .clear
     if #available(iOS 13.0, *) { container.overrideUserInterfaceStyle = isDark ? .dark : .light }
@@ -215,7 +221,8 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
         paddingVertical: paddingVertical,
         minHeight: minHeight,
         spacing: imagePadding,
-        badgeCount: badgeCount
+        badgeCount: badgeCount,
+        labelColor: labelColor
       )
     } else {
       // Use UIKit button for standard implementation
@@ -527,6 +534,52 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
           self.updateTouchBlockingOverlay()
           result(nil)
         } else { result(FlutterError(code: "bad_args", message: "Missing interaction", details: nil)) }
+      case "setBorderRadius":
+        if let args = call.arguments as? [String: Any] {
+          if let br = args["borderRadius"] as? NSNumber {
+            self.borderRadiusValue = CGFloat(truncating: br)
+          } else {
+            self.borderRadiusValue = nil
+          }
+          self.applyButtonStyle(buttonStyle: self.currentButtonStyle, round: self.makeRound)
+          result(nil)
+        } else {
+          self.borderRadiusValue = nil
+          self.applyButtonStyle(buttonStyle: self.currentButtonStyle, round: self.makeRound)
+          result(nil)
+        }
+      case "setPadding":
+        if let args = call.arguments as? [String: Any] {
+          if !usesSwiftUI, let button = self.button {
+            if #available(iOS 15.0, *) {
+              var cfg = button.configuration ?? .plain()
+              let top = (args["top"] as? NSNumber).map { CGFloat(truncating: $0) } ?? 0
+              let bottom = (args["bottom"] as? NSNumber).map { CGFloat(truncating: $0) } ?? 0
+              let leading = (args["left"] as? NSNumber).map { CGFloat(truncating: $0) } ?? 0
+              let trailing = (args["right"] as? NSNumber).map { CGFloat(truncating: $0) } ?? 0
+              cfg.contentInsets = NSDirectionalEdgeInsets(top: top, leading: leading, bottom: bottom, trailing: trailing)
+              button.configuration = cfg
+            } else {
+              let top = (args["top"] as? NSNumber).map { CGFloat(truncating: $0) } ?? 0
+              let bottom = (args["bottom"] as? NSNumber).map { CGFloat(truncating: $0) } ?? 0
+              let left = (args["left"] as? NSNumber).map { CGFloat(truncating: $0) } ?? 0
+              let right = (args["right"] as? NSNumber).map { CGFloat(truncating: $0) } ?? 0
+              button.contentEdgeInsets = UIEdgeInsets(top: top, left: left, bottom: bottom, right: right)
+            }
+          }
+          result(nil)
+        } else { result(FlutterError(code: "bad_args", message: "Missing padding args", details: nil)) }
+      case "setMinHeight":
+        // minHeight is managed by the Flutter-side SizedBox, no native action needed
+        result(nil)
+      case "setLabelColor":
+        if let args = call.arguments as? [String: Any], let lc = args["labelColor"] as? NSNumber {
+          self.labelColorValue = Self.colorFromARGB(lc.intValue)
+        } else {
+          self.labelColorValue = nil
+        }
+        self.applyButtonStyle(buttonStyle: self.currentButtonStyle, round: self.makeRound)
+        result(nil)
       default:
         result(FlutterMethodNotImplemented)
       }
@@ -559,7 +612,8 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
     paddingVertical: CGFloat?,
     minHeight: CGFloat?,
     spacing: CGFloat?,
-    badgeCount: Int?
+    badgeCount: Int?,
+    labelColor: UIColor?
   ) {
     // Create GlassButtonConfig with provided values or defaults
     let config = GlassButtonConfig(
@@ -594,6 +648,7 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
       let glassEffectInteractive: Bool
       let config: GlassButtonConfig
       let badgeCount: Int?
+      let labelColor: Color?
 
       var body: some View {
         GlassButtonSwiftUI(
@@ -613,7 +668,8 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
           glassEffectInteractive: glassEffectInteractive,
           namespace: namespace,
           config: config,
-          badgeCount: badgeCount
+          badgeCount: badgeCount,
+          labelColor: labelColor
         )
       }
     }
@@ -636,7 +692,8 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
       glassEffectId: glassEffectId,
       glassEffectInteractive: glassEffectInteractive,
       config: config,
-      badgeCount: badgeCount
+      badgeCount: badgeCount,
+      labelColor: labelColor != nil ? Color(labelColor!) : nil
     )
     
     let hostingController = UIHostingController(rootView: AnyView(swiftUIButton))
@@ -682,7 +739,7 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
 
   private func applyButtonStyle(buttonStyle: String, round: Bool) {
     guard let button = self.button, !usesSwiftUI else { return }
-    
+
     if #available(iOS 15.0, *) {
       // Preserve current content while swapping configurations
       let currentTitle = button.configuration?.title
@@ -711,7 +768,12 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
       default:
         config = .plain()
       }
-      config.cornerStyle = round ? .capsule : .dynamic
+      if let radius = borderRadiusValue {
+        config.background.cornerRadius = radius
+        config.cornerStyle = .fixed
+      } else {
+        config.cornerStyle = round ? .capsule : .dynamic
+      }
       // Apply theme tint to configuration in a platform-standard way
       if let tint = button.tintColor {
         switch buttonStyle {
@@ -725,13 +787,21 @@ class CupertinoButtonPlatformView: NSObject, FlutterPlatformView {
           break
         }
       }
+      // Apply explicit label color if set (overrides tint-derived foreground)
+      if let lc = labelColorValue {
+        config.baseForegroundColor = lc
+      }
       // Restore content after style swap
       config.title = currentTitle
       config.image = currentImage
       config.preferredSymbolConfigurationForImage = currentSymbolCfg
       button.configuration = config
     } else {
-      button.layer.cornerRadius = round ? 999 : 8
+      if let radius = borderRadiusValue {
+        button.layer.cornerRadius = radius
+      } else {
+        button.layer.cornerRadius = round ? 999 : 8
+      }
       button.clipsToBounds = true
       // Default background to preserve pressed/highlight behavior; custom glass handled above for iOS15+
       button.backgroundColor = .clear

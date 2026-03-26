@@ -21,6 +21,12 @@ struct GlassButtonSwiftUI: View {
   @Namespace private var namespace
   let config: GlassButtonConfig
   let badgeCount: Int?
+  let labelColor: Color?
+
+  /// Computes the effective icon color
+  private var effectiveIconColor: Color? {
+    return labelColor ?? tint ?? iconColor
+  }
 
   var body: some View {
     Button(action: onPressed) {
@@ -31,16 +37,16 @@ struct GlassButtonSwiftUI: View {
             .resizable()
             .scaledToFit()
             .frame(width: iconSize, height: iconSize)
-            .foregroundColor(tint != nil ? tint : iconColor)
+            .foregroundColor(effectiveIconColor)
         } else if let iconName = iconName {
           Image(systemName: iconName)
             .font(.system(size: iconSize))
-            .foregroundColor(iconColor)
+            .foregroundColor(effectiveIconColor)
         }
 
         if let title = title {
           Text(title)
-            .foregroundColor(tint)
+            .foregroundColor(labelColor ?? (tint != nil ? tint : nil))
         }
       }
       .padding(config.padding)

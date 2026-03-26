@@ -12,6 +12,8 @@ class CupertinoButtonNSView: NSView {
   private var currentButtonStyle: String = "automatic"
   private var usesSwiftUI: Bool = false
   private var makeRound: Bool = false
+  private var borderRadiusValue: CGFloat? = nil
+  private var labelColorValue: NSColor? = nil
 
   init(viewId: Int64, args: Any?, messenger: FlutterBinaryMessenger) {
     self.channel = FlutterMethodChannel(name: "CupertinoNativeButton_\(viewId)", binaryMessenger: messenger)
@@ -41,6 +43,7 @@ class CupertinoButtonNSView: NSView {
     var minHeight: CGFloat? = nil
     var imagePadding: CGFloat? = nil
     var badgeCount: Int? = nil
+    var labelColor: NSColor? = nil
 
     if let dict = args as? [String: Any] {
       if let t = dict["buttonTitle"] as? String { title = t }
@@ -70,7 +73,11 @@ class CupertinoButtonNSView: NSView {
       if let mh = dict["minHeight"] as? NSNumber { minHeight = CGFloat(truncating: mh) }
       if let ip = dict["imagePadding"] as? NSNumber { imagePadding = CGFloat(truncating: ip) }
       if let bc = dict["badgeCount"] as? NSNumber { badgeCount = bc.intValue }
+      if let lc = dict["labelColor"] as? NSNumber { labelColor = Self.colorFromARGB(lc.intValue) }
     }
+
+    self.borderRadiusValue = borderRadius
+    self.labelColorValue = labelColor
 
     wantsLayer = true
     layer?.backgroundColor = NSColor.clear.cgColor
@@ -106,7 +113,8 @@ class CupertinoButtonNSView: NSView {
         paddingHorizontal: paddingHorizontal,
         paddingVertical: paddingVertical,
         minHeight: minHeight,
-        spacing: imagePadding
+        spacing: imagePadding,
+        labelColor: labelColor != nil ? Color(nsColor: labelColor!) : nil
       )
     } else {
       // Use AppKit button for standard implementation
@@ -177,6 +185,11 @@ class CupertinoButtonNSView: NSView {
       default: nsButton.bezelStyle = .rounded
     }
       if makeRound { nsButton.bezelStyle = .circular }
+      if let radius = borderRadiusValue {
+        nsButton.wantsLayer = true
+        nsButton.layer?.cornerRadius = radius
+        nsButton.layer?.masksToBounds = true
+      }
       nsButton.setButtonType(.momentaryPushIn)
     if #available(macOS 10.14, *), let c = tint {
       if ["filled", "borderedProminent", "prominentGlass"].contains(buttonStyle) {
@@ -185,6 +198,10 @@ class CupertinoButtonNSView: NSView {
       } else {
           nsButton.contentTintColor = c
       }
+    }
+    // Apply explicit label color if set
+    if #available(macOS 10.14, *), let lc = labelColorValue {
+      nsButton.contentTintColor = lc
     }
     currentButtonStyle = buttonStyle
       nsButton.isEnabled = enabled
@@ -431,6 +448,53 @@ class CupertinoButtonNSView: NSView {
           self.removeBadge()
           result(nil)
         }
+      case "setBorderRadius":
+        if let args = call.arguments as? [String: Any] {
+          if let br = args["borderRadius"] as? NSNumber {
+            self.borderRadiusValue = CGFloat(truncating: br)
+          } else {
+            self.borderRadiusValue = nil
+          }
+          if !usesSwiftUI, let button = self.button {
+            if let radius = self.borderRadiusValue {
+              button.wantsLayer = true
+              button.layer?.cornerRadius = radius
+              button.layer?.masksToBounds = true
+            } else {
+              button.layer?.cornerRadius = 0
+              button.layer?.masksToBounds = false
+            }
+          }
+          result(nil)
+        } else {
+          self.borderRadiusValue = nil
+          if !usesSwiftUI, let button = self.button {
+            button.layer?.cornerRadius = 0
+            button.layer?.masksToBounds = false
+          }
+          result(nil)
+        }
+      case "setPadding":
+        // NSButton doesn't support direct content insets in the same way
+        // Padding is managed by Flutter-side layout
+        result(nil)
+      case "setMinHeight":
+        // minHeight is managed by the Flutter-side SizedBox
+        result(nil)
+      case "setInteraction":
+        result(nil)
+      case "setLabelColor":
+        if let args = call.arguments as? [String: Any], let lc = args["labelColor"] as? NSNumber {
+          self.labelColorValue = Self.colorFromARGB(lc.intValue)
+        } else {
+          self.labelColorValue = nil
+        }
+        if #available(macOS 10.14, *), !usesSwiftUI, let button = self.button {
+          if let lc = self.labelColorValue {
+            button.contentTintColor = lc
+          }
+        }
+        result(nil)
       default:
         result(FlutterMethodNotImplemented)
       }
@@ -466,7 +530,8 @@ class CupertinoButtonNSView: NSView {
     paddingHorizontal: CGFloat?,
     paddingVertical: CGFloat?,
     minHeight: CGFloat?,
-    spacing: CGFloat?
+    spacing: CGFloat?,
+    labelColor: Color?
   ) {
     // Create GlassButtonConfig with provided values or defaults
     let config = GlassButtonConfig(
@@ -500,6 +565,7 @@ class CupertinoButtonNSView: NSView {
       let glassEffectInteractive: Bool
       let config: GlassButtonConfig
       let badgeCount: Int?
+      let labelColor: Color?
 
       var body: some View {
         GlassButtonSwiftUI(
@@ -518,11 +584,12 @@ class CupertinoButtonNSView: NSView {
           glassEffectInteractive: glassEffectInteractive,
           namespace: namespace,
           config: config,
-          badgeCount: badgeCount
+          badgeCount: badgeCount,
+          labelColor: labelColor
         )
       }
     }
-    
+
     let swiftUIButton = ButtonWrapperView(
       title: title,
       iconName: iconName,
@@ -540,7 +607,8 @@ class CupertinoButtonNSView: NSView {
       glassEffectId: glassEffectId,
       glassEffectInteractive: glassEffectInteractive,
       config: config,
-      badgeCount: badgeCount
+      badgeCount: badgeCount,
+      labelColor: labelColor
     )
     
     let hostingController = NSHostingController(rootView: AnyView(swiftUIButton))

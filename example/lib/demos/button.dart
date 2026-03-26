@@ -1,5 +1,6 @@
 import 'package:cupertino_native_better/cupertino_native_better.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
 
 class ButtonDemoPage extends StatefulWidget {
   const ButtonDemoPage({super.key});
@@ -101,7 +102,10 @@ class _ButtonDemoPageState extends State<ButtonDemoPage> {
                   config: const CNButtonConfig(
                     style: CNButtonStyle.prominentGlass,
                     shrinkWrap: true,
+                    borderRadius: 8,
                   ),
+                  labelColor: Colors.yellow,
+                  backgroundColor: Colors.purple,
                 ),
                 CNButton(
                   label: 'Disabled',
@@ -159,11 +163,13 @@ class _ButtonDemoPageState extends State<ButtonDemoPage> {
                   config: const CNButtonConfig(style: CNButtonStyle.glass),
                 ),
                 CNButton.icon(
-                  icon: const CNSymbol('heart.fill', size: 18),
+                  icon: const CNSymbol('heart.fill', size: 18,color: Colors.black),
                   onPressed: () => _set('Icon ProminentGlass'),
                   config: const CNButtonConfig(
+                    borderRadius: 12,
                     style: CNButtonStyle.prominentGlass,
                   ),
+                  labelColor: Colors.yellow,
                 ),
               ],
             ),
@@ -382,7 +388,7 @@ class _ButtonDemoPageState extends State<ButtonDemoPage> {
                     size: 16,
                     color: CupertinoColors.activeGreen,
                   ),
-                  tint: CupertinoColors.activeGreen,
+                  backgroundColor: CupertinoColors.activeGreen,
                   onPressed: () => _set('PNG with Text'),
                   config: const CNButtonConfig(
                     style: CNButtonStyle.glass,

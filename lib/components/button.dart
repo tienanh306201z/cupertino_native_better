@@ -134,7 +134,8 @@ class CNButton extends StatefulWidget {
     this.icon,
     this.onPressed,
     this.enabled = true,
-    this.tint,
+    this.backgroundColor,
+    this.labelColor,
     this.customIcon,
     this.imageAsset,
     this.config = const CNButtonConfig(),
@@ -157,7 +158,8 @@ class CNButton extends StatefulWidget {
     this.imageAsset,
     this.onPressed,
     this.enabled = true,
-    this.tint,
+    this.backgroundColor,
+    this.labelColor,
     this.badgeCount,
     this.config = const CNButtonConfig(style: CNButtonStyle.glass),
   }) : label = null,
@@ -188,8 +190,11 @@ class CNButton extends StatefulWidget {
   /// Whether the control is interactive and tappable.
   final bool enabled;
 
-  /// Accent/tint color.
-  final Color? tint;
+  /// Background color for the button.
+  final Color? backgroundColor;
+
+  /// Label/foreground text color for the button.
+  final Color? labelColor;
 
   /// Optional badge count to display on icon buttons.
   ///
@@ -230,6 +235,9 @@ class _CNButtonState extends State<CNButton> {
   IconData? _lastCustomIcon;
   int? _lastBadgeCount;
   bool? _lastInteraction;
+  double? _lastBorderRadius;
+  double? _lastMinHeight;
+  int? _lastLabelColor;
   Offset? _downPosition;
   bool _pressed = false;
 
@@ -238,8 +246,8 @@ class _CNButtonState extends State<CNButton> {
 
   bool get _isDark => ThemeHelper.isDark(context);
 
-  Color? get _effectiveTint =>
-      widget.tint ?? ThemeHelper.getPrimaryColor(context);
+  Color? get _effectiveBackgroundColor =>
+      widget.backgroundColor ?? ThemeHelper.getPrimaryColor(context);
 
   @override
   void initState() {
@@ -444,7 +452,7 @@ class _CNButtonState extends State<CNButton> {
       'buttonStyle': widget.config.style.name,
       'enabled': (widget.enabled && widget.onPressed != null),
       'isDark': _isDark,
-      'style': encodeStyle(context, tint: _effectiveTint),
+      'style': encodeStyle(context, tint: _effectiveBackgroundColor),
       'imagePlacement': widget.config.imagePlacement.name,
       if (widget.config.imagePadding != null)
         'imagePadding': widget.config.imagePadding,
@@ -473,6 +481,8 @@ class _CNButtonState extends State<CNButton> {
       'glassEffectInteractive': widget.config.glassEffectInteractive,
       if (widget.badgeCount != null) 'badgeCount': widget.badgeCount,
       'interaction': widget.config.interaction,
+      if (widget.labelColor != null)
+        'labelColor': resolveColorToArgb(widget.labelColor, context),
     };
 
     final platformView = defaultTargetPlatform == TargetPlatform.iOS
@@ -599,7 +609,7 @@ class _CNButtonState extends State<CNButton> {
     // Clear previous intrinsic dimensions when view is recreated
     _intrinsicWidth = null;
     _intrinsicHeight = null;
-    _lastTint = resolveColorToArgb(_effectiveTint, context);
+    _lastTint = resolveColorToArgb(_effectiveBackgroundColor, context);
     _lastIsDark = _isDark;
     _lastTitle = widget.label;
     _lastIconName = widget.icon?.name;
@@ -614,6 +624,7 @@ class _CNButtonState extends State<CNButton> {
     _lastCustomIcon = widget.customIcon;
     _lastBadgeCount = widget.badgeCount;
     _lastInteraction = widget.config.interaction;
+    _lastLabelColor = resolveColorToArgb(widget.labelColor, context);
     // Always request intrinsic size to get both width and height
     // Use a small delay to ensure native view has finished layout
     Future.delayed(const Duration(milliseconds: 10), () {
@@ -656,7 +667,8 @@ class _CNButtonState extends State<CNButton> {
     final ch = _channel;
     if (ch == null) return;
     // Capture all context-derived values before any async operations
-    final tint = resolveColorToArgb(_effectiveTint, context);
+    final tint = resolveColorToArgb(_effectiveBackgroundColor, context);
+    final labelColorArgb = resolveColorToArgb(widget.labelColor, context);
     final preIconName = widget.icon?.name;
     final preIconSize = widget.icon?.size;
     final preIconColor = resolveColorToArgb(widget.icon?.color, context);
@@ -668,6 +680,13 @@ class _CNButtonState extends State<CNButton> {
     if (_lastTint != tint && tint != null) {
       await ch.invokeMethod('setStyle', {'tint': tint});
       _lastTint = tint;
+    }
+    // Sync labelColor
+    if (_lastLabelColor != labelColorArgb) {
+      await ch.invokeMethod('setLabelColor', {
+        if (labelColorArgb != null) 'labelColor': labelColorArgb,
+      });
+      _lastLabelColor = labelColorArgb;
     }
     if (_lastStyle != widget.config.style) {
       await ch.invokeMethod('setStyle', {
@@ -711,10 +730,41 @@ class _CNButtonState extends State<CNButton> {
 
     // Sync padding
     if (_lastPadding != widget.config.padding) {
-      // Padding is handled via creationParams, so we need to rebuild the view
-      // This is a limitation - in a production app, you might want to handle this differently
-      _requestIntrinsicSize();
+      final p = widget.config.padding;
+      if (p != null) {
+        await ch.invokeMethod('setPadding', {
+          'top': p.top,
+          'bottom': p.bottom,
+          'left': p.left,
+          'right': p.right,
+        });
+      } else {
+        await ch.invokeMethod('setPadding', {
+          'top': 0.0,
+          'bottom': 0.0,
+          'left': 0.0,
+          'right': 0.0,
+        });
+      }
       _lastPadding = widget.config.padding;
+      _requestIntrinsicSize();
+    }
+
+    // Sync borderRadius
+    if (_lastBorderRadius != widget.config.borderRadius) {
+      await ch.invokeMethod('setBorderRadius', {
+        if (widget.config.borderRadius != null)
+          'borderRadius': widget.config.borderRadius,
+      });
+      _lastBorderRadius = widget.config.borderRadius;
+    }
+
+    // Sync minHeight
+    if (_lastMinHeight != widget.config.minHeight) {
+      await ch.invokeMethod('setMinHeight', {
+        if (widget.config.minHeight != null) 'minHeight': widget.config.minHeight,
+      });
+      _lastMinHeight = widget.config.minHeight;
     }
 
     // Sync icon properties if icon is present (works for both icon-only and label+icon buttons)
@@ -924,7 +974,7 @@ class _CNButtonState extends State<CNButton> {
     if (ch == null) return;
     // Capture context-derived values before any awaits
     final isDark = _isDark;
-    final tint = resolveColorToArgb(_effectiveTint, context);
+    final tint = resolveColorToArgb(_effectiveBackgroundColor, context);
     if (_lastIsDark != isDark) {
       await ch.invokeMethod('setBrightness', {'isDark': isDark});
       _lastIsDark = isDark;
@@ -1334,10 +1384,10 @@ class _CNButtonState extends State<CNButton> {
       case CNButtonStyle.filled:
       case CNButtonStyle.borderedProminent:
       case CNButtonStyle.prominentGlass:
-        return _effectiveTint;
+        return _effectiveBackgroundColor;
       case CNButtonStyle.glass:
         // For iOS < 26, approximate glass with tinted appearance
-        return _effectiveTint?.withValues(alpha: 0.1);
+        return _effectiveBackgroundColor?.withValues(alpha: 0.1);
       default:
         return null;
     }
@@ -1348,7 +1398,7 @@ class _CNButtonState extends State<CNButton> {
       case CNButtonStyle.filled:
       case CNButtonStyle.borderedProminent:
       case CNButtonStyle.prominentGlass:
-        return _effectiveTint ?? Theme.of(context).primaryColor;
+        return _effectiveBackgroundColor ?? Theme.of(context).primaryColor;
       case CNButtonStyle.glass:
         return Theme.of(context).primaryColor.withValues(alpha: 0.1);
       default:

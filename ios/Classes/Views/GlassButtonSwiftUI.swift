@@ -22,10 +22,11 @@ struct GlassButtonSwiftUI: View {
   var namespace: Namespace.ID
   let config: GlassButtonConfig
   let badgeCount: Int?
+  let labelColor: Color?
 
   /// Computes the effective icon color
   private var effectiveIconColor: Color? {
-    return tint ?? iconColor
+    return labelColor ?? tint ?? iconColor
   }
 
   var body: some View {
@@ -46,7 +47,7 @@ struct GlassButtonSwiftUI: View {
 
         if let title = title {
           Text(title)
-            .foregroundColor(tint != nil ? Color(tint!) : nil)
+            .foregroundColor(labelColor ?? (tint != nil ? Color(tint!) : nil))
         }
       }
       .padding(config.padding)

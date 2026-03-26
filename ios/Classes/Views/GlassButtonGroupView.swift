@@ -55,7 +55,8 @@ struct GlassButtonGroupSwiftUI: View {
               glassEffectInteractive: button.glassEffectInteractive,
               namespace: namespace,
               config: button.config,
-              badgeCount: nil
+              badgeCount: nil,
+              labelColor: button.labelColor
             )
             .fixedSize(horizontal: true, vertical: false)
           }
@@ -81,7 +82,8 @@ struct GlassButtonGroupSwiftUI: View {
               glassEffectInteractive: button.glassEffectInteractive,
               namespace: namespace,
               config: button.config,
-              badgeCount: nil
+              badgeCount: nil,
+              labelColor: button.labelColor
             )
             .fixedSize(horizontal: true, vertical: false)
           }
@@ -197,6 +199,7 @@ struct GlassButtonData: Identifiable {
   let glassEffectInteractive: Bool
   let config: GlassButtonConfig
   let badgeCount: Int?
+  let labelColor: Color?
 }
 
 @available(iOS 26.0, *)
@@ -253,6 +256,7 @@ class GlassButtonGroupPlatformView: NSObject, FlutterPlatformView {
           let iconColorARGB = (buttonDict["iconColor"] as? NSNumber)?.intValue
           let iconColor = iconColorARGB.map { Color(uiColor: Self.colorFromARGB($0)) }
           let tint = (buttonDict["tint"] as? NSNumber).map { Color(uiColor: Self.colorFromARGB($0.intValue)) }
+          let labelColor = (buttonDict["labelColor"] as? NSNumber).map { Color(uiColor: Self.colorFromARGB($0.intValue)) }
           let isEnabled = (buttonDict["enabled"] as? NSNumber)?.boolValue ?? true
           let isInteractive = (buttonDict["interaction"] as? NSNumber)?.boolValue ?? true
           let style = buttonDict["style"] as? String ?? "glass"
@@ -364,7 +368,8 @@ class GlassButtonGroupPlatformView: NSObject, FlutterPlatformView {
             glassEffectId: glassEffectId,
             glassEffectInteractive: glassEffectInteractive,
             config: config,
-            badgeCount: badgeCount
+            badgeCount: badgeCount,
+            labelColor: labelColor
           )
           buttons.append(buttonData)
         }
@@ -483,6 +488,7 @@ class GlassButtonGroupPlatformView: NSObject, FlutterPlatformView {
     let iconColorARGB = (buttonDict["iconColor"] as? NSNumber)?.intValue
     let iconColor = iconColorARGB.map { Color(uiColor: Self.colorFromARGB($0)) }
     let tint = (buttonDict["tint"] as? NSNumber).map { Color(uiColor: Self.colorFromARGB($0.intValue)) }
+    let labelColor = (buttonDict["labelColor"] as? NSNumber).map { Color(uiColor: Self.colorFromARGB($0.intValue)) }
     let isEnabled = (buttonDict["enabled"] as? NSNumber)?.boolValue ?? true
     let isInteractive = (buttonDict["interaction"] as? NSNumber)?.boolValue ?? true
     let style = buttonDict["style"] as? String ?? "glass"
@@ -585,7 +591,8 @@ class GlassButtonGroupPlatformView: NSObject, FlutterPlatformView {
       glassEffectId: glassEffectId,
       glassEffectInteractive: glassEffectInteractive,
       config: config,
-      badgeCount: badgeCount
+      badgeCount: badgeCount,
+      labelColor: labelColor
     )
 
     viewModel.updateButton(at: index, with: buttonData)
@@ -606,6 +613,7 @@ class GlassButtonGroupPlatformView: NSObject, FlutterPlatformView {
       let iconColorARGB = (buttonDict["iconColor"] as? NSNumber)?.intValue
       let iconColor = iconColorARGB.map { Color(uiColor: Self.colorFromARGB($0)) }
       let tint = (buttonDict["tint"] as? NSNumber).map { Color(uiColor: Self.colorFromARGB($0.intValue)) }
+      let labelColor = (buttonDict["labelColor"] as? NSNumber).map { Color(uiColor: Self.colorFromARGB($0.intValue)) }
       let isEnabled = (buttonDict["enabled"] as? NSNumber)?.boolValue ?? true
       let isInteractive = (buttonDict["interaction"] as? NSNumber)?.boolValue ?? true
       let style = buttonDict["style"] as? String ?? "glass"
@@ -705,7 +713,8 @@ class GlassButtonGroupPlatformView: NSObject, FlutterPlatformView {
         glassEffectId: glassEffectId,
         glassEffectInteractive: glassEffectInteractive,
         config: config,
-        badgeCount: badgeCount
+        badgeCount: badgeCount,
+        labelColor: labelColor
       )
       newButtons.append(buttonData)
     }

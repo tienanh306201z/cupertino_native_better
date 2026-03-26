@@ -14,7 +14,8 @@ void main() {
       expect(button.customIcon, isNull);
       expect(button.imageAsset, isNull);
       expect(button.onPressed, isNull);
-      expect(button.tint, isNull);
+      expect(button.backgroundColor, isNull);
+      expect(button.labelColor, isNull);
       expect(button.config, isNotNull);
     });
 
@@ -41,10 +42,15 @@ void main() {
       expect(button.customIcon, Icons.star);
     });
 
-    test('creates button with tint color', () {
-      final button = CNButtonData(label: 'Colored', tint: Colors.red);
+    test('creates button with backgroundColor and labelColor', () {
+      final button = CNButtonData(
+        label: 'Colored',
+        backgroundColor: Colors.red,
+        labelColor: Colors.white,
+      );
 
-      expect(button.tint, Colors.red);
+      expect(button.backgroundColor, Colors.red);
+      expect(button.labelColor, Colors.white);
     });
 
     test('creates disabled button', () {
@@ -103,24 +109,24 @@ void main() {
         expect(copy.enabled, false);
       });
 
-      test('copies button with new tint', () {
-        final original = CNButtonData(label: 'Test', tint: Colors.blue);
-        final copy = original.copyWith(tint: Colors.red);
+      test('copies button with new backgroundColor', () {
+        final original = CNButtonData(label: 'Test', backgroundColor: Colors.blue);
+        final copy = original.copyWith(backgroundColor: Colors.red);
 
-        expect(copy.tint, Colors.red);
+        expect(copy.backgroundColor, Colors.red);
       });
 
       test('preserves original values when not specified', () {
         final original = CNButtonData(
           label: 'Original',
           enabled: false,
-          tint: Colors.blue,
+          backgroundColor: Colors.blue,
         );
         final copy = original.copyWith(label: 'New Label');
 
         expect(copy.label, 'New Label');
         expect(copy.enabled, false);
-        expect(copy.tint, Colors.blue);
+        expect(copy.backgroundColor, Colors.blue);
       });
     });
   });

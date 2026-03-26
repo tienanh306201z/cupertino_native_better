@@ -42,7 +42,8 @@ class CNButtonData {
     this.imageAsset,
     this.onPressed,
     this.enabled = true,
-    this.tint,
+    this.backgroundColor,
+    this.labelColor,
     this.config = const CNButtonDataConfig(),
   }) : badgeCount = null,
        isIcon = false;
@@ -54,7 +55,8 @@ class CNButtonData {
     this.imageAsset,
     this.onPressed,
     this.enabled = true,
-    this.tint,
+    this.backgroundColor,
+    this.labelColor,
     this.badgeCount,
     this.config = const CNButtonDataConfig(),
   }) : label = null,
@@ -78,8 +80,11 @@ class CNButtonData {
   /// Whether the button is enabled.
   final bool enabled;
 
-  /// Tint color for the button.
-  final Color? tint;
+  /// Background color for the button.
+  final Color? backgroundColor;
+
+  /// Label/foreground text color for the button.
+  final Color? labelColor;
 
   /// Configuration for the button appearance.
   final CNButtonDataConfig config;
@@ -99,7 +104,8 @@ class CNButtonData {
     CNImageAsset? imageAsset,
     VoidCallback? onPressed,
     bool? enabled,
-    Color? tint,
+    Color? backgroundColor,
+    Color? labelColor,
     int? badgeCount,
     CNButtonDataConfig? config,
   }) {
@@ -110,7 +116,8 @@ class CNButtonData {
         imageAsset: imageAsset ?? this.imageAsset,
         onPressed: onPressed ?? this.onPressed,
         enabled: enabled ?? this.enabled,
-        tint: tint ?? this.tint,
+        backgroundColor: backgroundColor ?? this.backgroundColor,
+        labelColor: labelColor ?? this.labelColor,
         badgeCount: badgeCount ?? this.badgeCount,
         config: config ?? this.config,
       );
@@ -122,7 +129,8 @@ class CNButtonData {
       imageAsset: imageAsset ?? this.imageAsset,
       onPressed: onPressed ?? this.onPressed,
       enabled: enabled ?? this.enabled,
-      tint: tint ?? this.tint,
+      backgroundColor: backgroundColor ?? this.backgroundColor,
+      labelColor: labelColor ?? this.labelColor,
       config: config ?? this.config,
     );
   }

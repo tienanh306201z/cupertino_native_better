@@ -399,7 +399,8 @@ class _CNGlassButtonGroupState extends State<CNGlassButtonGroup> {
           imageAsset: button.imageAsset,
           onPressed: button.onPressed,
           enabled: button.enabled,
-          tint: button.tint,
+          backgroundColor: button.backgroundColor,
+          labelColor: button.labelColor,
           badgeCount: button.badgeCount,
           config: CNButtonConfig(
             width: button.config.width,
@@ -423,7 +424,8 @@ class _CNGlassButtonGroupState extends State<CNGlassButtonGroup> {
           imageAsset: button.imageAsset,
           onPressed: button.onPressed,
           enabled: button.enabled,
-          tint: button.tint,
+          backgroundColor: button.backgroundColor,
+          labelColor: button.labelColor,
           config: CNButtonConfig(
             width: button.config.width,
             style: button.config.style,
@@ -452,7 +454,8 @@ class _CNGlassButtonGroupState extends State<CNGlassButtonGroup> {
           imageAsset: data.imageAsset,
           onPressed: data.onPressed,
           enabled: data.enabled,
-          tint: data.tint,
+          backgroundColor: data.backgroundColor,
+          labelColor: data.labelColor,
           badgeCount: data.badgeCount,
           config: CNButtonConfig(
             width: data.config.width,
@@ -478,7 +481,8 @@ class _CNGlassButtonGroupState extends State<CNGlassButtonGroup> {
           imageAsset: data.imageAsset,
           onPressed: data.onPressed,
           enabled: data.enabled,
-          tint: data.tint,
+          backgroundColor: data.backgroundColor,
+          labelColor: data.labelColor,
           config: CNButtonConfig(
             width: data.config.width,
             style: data.config.style,
@@ -508,8 +512,11 @@ class _CNGlassButtonGroupState extends State<CNGlassButtonGroup> {
         : (button.icon?.color != null
               ? resolveColorToArgb(button.icon!.color, context)
               : null);
-    final tintArgb = button.tint != null
-        ? resolveColorToArgb(button.tint, context)
+    final tintArgb = button.backgroundColor != null
+        ? resolveColorToArgb(button.backgroundColor, context)
+        : null;
+    final labelColorArgb = button.labelColor != null
+        ? resolveColorToArgb(button.labelColor, context)
         : null;
 
     Uint8List? iconBytes;
@@ -548,6 +555,7 @@ class _CNGlassButtonGroupState extends State<CNGlassButtonGroup> {
         'assetPath': resolvedAssetPath ?? button.imageAsset!.assetPath,
       'enabled': button.enabled,
       if (tintArgb != null) 'tint': tintArgb,
+      if (labelColorArgb != null) 'labelColor': labelColorArgb,
       if (button.badgeCount != null) 'badgeCount': button.badgeCount,
       'minHeight': button.config.minHeight ?? 44.0,
       'style': button.config.style.name,
@@ -590,8 +598,11 @@ class _CNGlassButtonGroupState extends State<CNGlassButtonGroup> {
         : (button.icon?.color != null
               ? resolveColorToArgb(button.icon!.color, context)
               : null);
-    final tintArgb = button.tint != null
-        ? resolveColorToArgb(button.tint, context)
+    final tintArgb = button.backgroundColor != null
+        ? resolveColorToArgb(button.backgroundColor, context)
+        : null;
+    final labelColorArgb = button.labelColor != null
+        ? resolveColorToArgb(button.labelColor, context)
         : null;
 
     Uint8List? iconBytes;
@@ -630,6 +641,7 @@ class _CNGlassButtonGroupState extends State<CNGlassButtonGroup> {
         'assetPath': resolvedAssetPath ?? button.imageAsset!.assetPath,
       'enabled': button.enabled,
       if (tintArgb != null) 'tint': tintArgb,
+      if (labelColorArgb != null) 'labelColor': labelColorArgb,
       if (button.badgeCount != null) 'badgeCount': button.badgeCount,
       'minHeight': button.config.minHeight ?? 44.0,
       'style': button.config.style.name,
@@ -679,6 +691,7 @@ class _ButtonSnapshot {
   final bool enabled;
   final bool interaction;
   final int? tint;
+  final int? labelColor;
   final int? badgeCount;
 
   _ButtonSnapshot({
@@ -695,6 +708,7 @@ class _ButtonSnapshot {
     required this.enabled,
     required this.interaction,
     this.tint,
+    this.labelColor,
     this.badgeCount,
   });
 
@@ -712,7 +726,8 @@ class _ButtonSnapshot {
       style: button.config.style.name,
       enabled: button.enabled,
       interaction: button.config.interaction,
-      tint: button.tint?.toARGB32(),
+      tint: button.backgroundColor?.toARGB32(),
+      labelColor: button.labelColor?.toARGB32(),
       badgeCount: button.badgeCount,
     );
   }
@@ -731,7 +746,8 @@ class _ButtonSnapshot {
       style: button.config.style.name,
       enabled: button.enabled,
       interaction: button.config.interaction,
-      tint: button.tint?.toARGB32(),
+      tint: button.backgroundColor?.toARGB32(),
+      labelColor: button.labelColor?.toARGB32(),
       badgeCount: button.badgeCount,
     );
   }
@@ -750,6 +766,7 @@ class _ButtonSnapshot {
         enabled == other.enabled &&
         interaction == other.interaction &&
         tint == other.tint &&
+        labelColor == other.labelColor &&
         badgeCount == other.badgeCount;
   }
 }
