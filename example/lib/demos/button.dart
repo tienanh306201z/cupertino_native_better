@@ -102,7 +102,6 @@ class _ButtonDemoPageState extends State<ButtonDemoPage> {
                   config: const CNButtonConfig(
                     style: CNButtonStyle.prominentGlass,
                     shrinkWrap: true,
-                    borderRadius: 8,
                   ),
                   labelColor: Colors.yellow,
                   backgroundColor: Colors.purple,
@@ -1163,6 +1162,49 @@ class _ButtonDemoPageState extends State<ButtonDemoPage> {
             ),
             const SizedBox(height: 12),
             _ParameterChangeTest(),
+            const SizedBox(height: 48),
+            const Text('Overlay / Dialog test'),
+            const SizedBox(height: 8),
+            const Text(
+              'Tap "Show Dialog" — then try tapping the button below while the dialog is open. It should NOT fire.',
+              style: TextStyle(
+                fontSize: 12,
+                color: CupertinoColors.secondaryLabel,
+              ),
+            ),
+            const SizedBox(height: 12),
+            CNButton(
+              label: 'Show Dialog',
+              onPressed: () {
+                showCupertinoDialog<void>(
+                  context: context,
+                  builder: (ctx) => CupertinoAlertDialog(
+                    title: const Text('Dialog open'),
+                    content: const Text(
+                      'The button behind this dialog should be blocked.',
+                    ),
+                    actions: [
+                      CupertinoDialogAction(
+                        child: const Text('Close'),
+                        onPressed: () => Navigator.of(ctx).pop(),
+                      ),
+                    ],
+                  ),
+                );
+              },
+              config: const CNButtonConfig(
+                style: CNButtonStyle.filled,
+                shrinkWrap: true,
+              ),
+            ),
+            const SizedBox(height: 12),
+            CNButton(
+              label: 'Tap me (should be blocked under dialog)',
+              onPressed: () => _set('BLOCKED — button fired under dialog!'),
+              config: const CNButtonConfig(
+                style: CNButtonStyle.glass,
+              ),
+            ),
             const SizedBox(height: 48),
             Center(child: Text('Last pressed: $_last')),
           ],

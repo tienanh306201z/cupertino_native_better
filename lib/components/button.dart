@@ -240,6 +240,7 @@ class _CNButtonState extends State<CNButton> {
   int? _lastLabelColor;
   Offset? _downPosition;
   bool _pressed = false;
+  bool _routeObscured = false;
 
   Future<String>? _assetPathFuture;
   Future<Uint8List?>? _customIconFuture;
@@ -248,6 +249,8 @@ class _CNButtonState extends State<CNButton> {
 
   Color? get _effectiveBackgroundColor =>
       widget.backgroundColor ?? ThemeHelper.getPrimaryColor(context);
+
+  bool get _effectiveInteraction => widget.config.interaction && !_routeObscured;
 
   @override
   void initState() {
@@ -287,6 +290,26 @@ class _CNButtonState extends State<CNButton> {
     super.didChangeDependencies();
     _syncBrightnessIfNeeded();
     _syncPropsToNativeIfNeeded();
+    // ModalRoute.of(context) creates an inherited-widget dependency on this
+    // element, so didChangeDependencies is called whenever isCurrent changes
+    // (e.g. a dialog is pushed/popped). We use this to disable the native
+    // UIButton via the method channel, since IgnorePointer cannot block
+    // touches that UIKit delivers directly to hybrid-composition platform views.
+    final route = ModalRoute.of(context);
+    final obscured = route != null && !route.isCurrent;
+    if (obscured != _routeObscured) {
+      _routeObscured = obscured;
+      _syncInteractionToNative();
+    }
+  }
+
+  Future<void> _syncInteractionToNative() async {
+    final ch = _channel;
+    if (ch == null) return;
+    try {
+      await ch.invokeMethod('setInteraction', {'interaction': _effectiveInteraction});
+      _lastInteraction = _effectiveInteraction;
+    } catch (_) {}
   }
 
   @override
@@ -563,12 +586,12 @@ class _CNButtonState extends State<CNButton> {
             : defaultHeight;
         final buttonWidget = Listener(
           onPointerDown: (e) {
-            if (!widget.config.interaction) return;
+            if (!_effectiveInteraction) return;
             _downPosition = e.position;
             _setPressed(true);
           },
           onPointerMove: (e) {
-            if (!widget.config.interaction) return;
+            if (!_effectiveInteraction) return;
             final start = _downPosition;
             if (start != null && _pressed) {
               final moved = (e.position - start).distance;
@@ -578,12 +601,12 @@ class _CNButtonState extends State<CNButton> {
             }
           },
           onPointerUp: (_) {
-            if (!widget.config.interaction) return;
+            if (!_effectiveInteraction) return;
             _setPressed(false);
             _downPosition = null;
           },
           onPointerCancel: (_) {
-            if (!widget.config.interaction) return;
+            if (!_effectiveInteraction) return;
             _setPressed(false);
             _downPosition = null;
           },
@@ -592,8 +615,10 @@ class _CNButtonState extends State<CNButton> {
           ),
         );
 
-        // Wrap in IgnorePointer when interaction is disabled to absorb all touches
-        if (!widget.config.interaction) {
+        // Wrap in IgnorePointer when interaction is disabled or a modal route
+        // (dialog, bottom sheet, etc.) covers this button, preventing touches
+        // from reaching the native UIKit view.
+        if (!_effectiveInteraction) {
           return IgnorePointer(ignoring: true, child: buttonWidget);
         }
 
@@ -623,7 +648,7 @@ class _CNButtonState extends State<CNButton> {
     _lastImageAssetData = widget.imageAsset?.imageData;
     _lastCustomIcon = widget.customIcon;
     _lastBadgeCount = widget.badgeCount;
-    _lastInteraction = widget.config.interaction;
+    _lastInteraction = _effectiveInteraction;
     _lastLabelColor = resolveColorToArgb(widget.labelColor, context);
     // Always request intrinsic size to get both width and height
     // Use a small delay to ensure native view has finished layout
@@ -638,7 +663,7 @@ class _CNButtonState extends State<CNButton> {
     switch (call.method) {
       case 'pressed':
         if (widget.enabled &&
-            widget.config.interaction &&
+            _effectiveInteraction &&
             widget.onPressed != null) {
           widget.onPressed!();
         }
@@ -960,12 +985,12 @@ class _CNButtonState extends State<CNButton> {
       _lastBadgeCount = widget.badgeCount;
     }
 
-    // Sync interaction state
-    if (_lastInteraction != widget.config.interaction) {
+    // Sync interaction state (combines widget.config.interaction and route-obscured state)
+    if (_lastInteraction != _effectiveInteraction) {
       await ch.invokeMethod('setInteraction', {
-        'interaction': widget.config.interaction,
+        'interaction': _effectiveInteraction,
       });
-      _lastInteraction = widget.config.interaction;
+      _lastInteraction = _effectiveInteraction;
     }
   }
 
